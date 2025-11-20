@@ -1,0 +1,13 @@
+[package]
+name = "frog_gui"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+frogcore = {path="../frogcore"}
+serde_inspector = {path="../serde_inspector"}
+serde_json = "1.0.138"
+egui = "0.31.0"
+egui_extras = "0.31.0"
+macroquad = "0.4.14"
+egui-macroquad = "0.17.3"

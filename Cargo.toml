@@ -1,0 +1,3 @@
+[workspace]
+resolver = "3"
+members = ["frogcore", "frog_cli", "frog_gui", "serde_inspector"]
