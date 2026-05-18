@@ -564,6 +564,11 @@ impl AnalysisPanel {
             ui.ctx().request_repaint();
             let new_time = (ui.input(|i| i.time) - self.play_offset) * self.play_timescale
                 + self.play_time_offset;
+
+            if new_time > self.end_time {
+                self.playing = false;
+            }
+
             set_time!(new_time);
         }
 
@@ -646,7 +651,7 @@ impl AnalysisPanel {
             .integer()
             .text("Minutes");
 
-        let secs_slider = egui::Slider::new(&mut seconds, 0.0..=60.0)
+        let secs_slider = egui::Slider::new(&mut seconds, 0.0..=59.99)
             .handle_shape(egui::style::HandleShape::Rect { aspect_ratio: 0.4 })
             .text("Seconds");
 
