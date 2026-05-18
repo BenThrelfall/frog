@@ -4,7 +4,7 @@ use std::{
     path::PathBuf,
 };
 
-use clap::{Parser, command};
+use clap::Parser;
 use frogcore::{
     scenario::{ScenarioIdentity, generation::{
         ScenarioGenerator::*,
@@ -20,7 +20,6 @@ use rand_chacha::ChaCha12Rng;
 use rand_distr::Normal;
 
 #[derive(Parser, Debug)]
-#[command()]
 struct Args {
     output: PathBuf,
 

@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use clap::{Parser, command};
+use clap::Parser;
 use frogcore::{
     scenario::{
         ScenarioIdentity,
@@ -18,7 +18,6 @@ use rand::Rng;
 use rand_distr::Normal;
 
 #[derive(Parser, Debug)]
-#[command()]
 struct Args {
     #[arg(short, long)]
     output: Option<PathBuf>,

@@ -4,7 +4,7 @@ use std::{
     path::PathBuf,
 };
 
-use clap::{arg, command, Parser};
+use clap::Parser;
 use frogcore::{
     analysis::{CompleteAnalysis, EmergencyResult},
     node::{parse_model, MODEL_LIST},
@@ -17,7 +17,6 @@ use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterato
 use serde::Serialize;
 
 #[derive(Parser, Debug)]
-#[command(version, about, long_about = None)]
 struct Args {
     /// A file containing a list of scenarios that will be run.
     /// This overrides `results`.
@@ -250,7 +249,13 @@ fn load_result_files(results_path: PathBuf) -> Vec<SimOutput> {
             }
         }
     } else {
-        for thing in read_dir(results_path).unwrap() {
+
+        let Ok(dir) = read_dir(results_path) else {
+            eprintln!("<Error> No valid input was given (default is \"sim_output.json\" or specify using --pack or --results)");
+            return vec![]; 
+        };
+
+        for thing in dir {
             let file = match thing {
                 Ok(file) => file,
                 Err(e) => {
