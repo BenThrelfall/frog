@@ -142,7 +142,6 @@ impl ScenarioGenerator {
                         if index < node_count {
                             val.movement_indicator = MovementIndicator::Mobile;
                         } else {
-                            let mut val = ScenarioNodeSettings::default();
                             val.is_gateway = true;
 
                             val.movement_indicator = if gateways_move {
@@ -203,7 +202,6 @@ impl ScenarioGenerator {
                         if index < node_count {
                             val.movement_indicator = MovementIndicator::Mobile;
                         } else {
-                            let mut val = ScenarioNodeSettings::default();
                             val.is_gateway = true;
 
                             val.movement_indicator = if gateways_move {
