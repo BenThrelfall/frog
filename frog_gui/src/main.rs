@@ -195,12 +195,13 @@ impl MyApp {
                     if let Some(ref panel) = self.editor_panel {
                         ui.vertical(|ui| {
                             if ui.button("Save Scenario As:").clicked() {
-                                write_file(
+                                if let Err(e) = write_file(
                                     self.save_path.clone().into(),
                                     panel.scenario.clone(),
                                     false,
-                                )
-                                .unwrap();
+                                ) {
+                                    error!("{e}");
+                                };
                             }
                             ui.text_edit_singleline(&mut self.save_path);
                         });
