@@ -1,6 +1,6 @@
 use egui::{
     Align, Color32, CornerRadius, DragValue, Frame, Label, Layout, Pos2, RichText, ScrollArea,
-    Stroke, Widget, style::WidgetVisuals,
+    Stroke, style::WidgetVisuals,
 };
 
 use std::collections::{HashMap, HashSet};
@@ -21,7 +21,10 @@ use frogcore::{
     units::{METRES, Time},
 };
 
-use crate::scene::{SceneData, point_to_vec};
+use crate::{
+    GuiStore,
+    scene::{SceneData, point_to_vec},
+};
 use crate::{Inspectable, convert_rect, get_event_window, short_content};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -30,7 +33,8 @@ enum InspectorTab {
     State,
 }
 
-pub struct AnalysisPanel {
+#[derive(Debug)]
+pub struct PlaybackPanel {
     scene: SceneData,
     node_locations: NodeLocation,
     node_settings: Vec<ScenarioNodeSettings>,
@@ -56,8 +60,8 @@ pub struct AnalysisPanel {
     live_sim: Option<LiveSimulation>,
 }
 
-impl AnalysisPanel {
-    pub fn new(scenario: Scenario, results: SimOutput) -> AnalysisPanel {
+impl PlaybackPanel {
+    pub fn new(scenario: Scenario, results: SimOutput) -> PlaybackPanel {
         let CompleteAnalysis {
             node_settings,
             node_events,
@@ -80,9 +84,13 @@ impl AnalysisPanel {
         let transmission_graphs = create_transmission_graphs(sim_events.clone());
 
         let mut scene = SceneData::new();
-        scene.zoom_to_fit(&node_locations.display_locations(Time::from_seconds(0.0)));
+        scene.zoom_to_fit(
+            &node_locations.display_locations(Time::from_seconds(0.0)),
+            screen_width(),
+            screen_height(),
+        );
 
-        AnalysisPanel {
+        PlaybackPanel {
             node_locations,
             node_settings,
             node_events,
@@ -109,11 +117,11 @@ impl AnalysisPanel {
         }
     }
 
-    pub fn from_scenario(scenario: Scenario, model: NodeModel) -> AnalysisPanel {
+    pub fn from_scenario(scenario: Scenario, model: NodeModel) -> PlaybackPanel {
         let live = LiveSimulation::new(12345, scenario.clone(), model.clone(), true);
         let sim_output = run_simulation(12345, scenario.clone(), model, true);
 
-        let mut out = AnalysisPanel::new(scenario, sim_output);
+        let mut out = PlaybackPanel::new(scenario, sim_output);
 
         out.live_sim = Some(live);
 
@@ -134,8 +142,8 @@ impl AnalysisPanel {
     }
 }
 
-impl Widget for &mut AnalysisPanel {
-    fn ui(self, ui: &mut egui::Ui) -> egui::Response {
+impl PlaybackPanel {
+    pub fn show(&mut self, ui: &mut egui::Ui, _store: &mut GuiStore) -> egui::Response {
         let node_locations = self
             .node_locations
             .display_locations(Time::from_seconds(self.current_time));
@@ -143,22 +151,22 @@ impl Widget for &mut AnalysisPanel {
         let item_background = Color32::from_hex("#212121").unwrap();
         let main_red = Color32::from_hex("#9b0d0d").unwrap();
 
-        egui::TopBottomPanel::top("timeline").show_inside(ui, |ui| {
+        egui::TopBottomPanel::top(ui.id().with("timeline")).show_inside(ui, |ui| {
             self.analysis_timeline_panel(item_background, main_red, ui);
         });
 
-        egui::SidePanel::left("inspector")
+        egui::SidePanel::left(ui.id().with("inspector"))
             .max_width(500.0)
             .min_width(350.0)
             .show_inside(ui, |ui| {
                 self.analysis_inspector_panel(&node_locations, item_background, ui)
             });
 
-        egui::SidePanel::right("right_panel")
+        egui::SidePanel::right(ui.id().with("right_panel"))
             .min_width(285.0)
             .show_inside(ui, |ui| self.analysis_events_panel(item_background, ui));
 
-        egui::TopBottomPanel::bottom("transmission_timeline")
+        egui::TopBottomPanel::bottom(ui.id().with("transmission_timeline"))
             .min_height(150.0)
             .show_inside(ui, |ui| {
                 self.analysis_transmission_timeline(main_red, ui);
@@ -179,13 +187,25 @@ impl Widget for &mut AnalysisPanel {
     }
 }
 
-impl AnalysisPanel {
+impl PlaybackPanel {
     fn analysis_scene_panel(
         &mut self,
         node_locations: Vec<frogcore::node_location::Point>,
         ui: &mut egui::Ui,
         scene_rect: Rect,
     ) {
+        if scene_rect.y.is_infinite() {
+            return;
+        }
+
+        let Rect { x, y, w, h } = scene_rect;
+        self.scene.camera.viewport = Some((
+            x as i32,
+            (screen_height() - y - h) as i32,
+            w as i32,
+            h as i32,
+        ));
+
         self.scene.camera_control(scene_rect);
         self.scene
             .select_interaction(&mut self.inspect_target, &node_locations, scene_rect);
@@ -326,7 +346,7 @@ impl AnalysisPanel {
 
         ScrollArea::vertical().show(ui, |ui| {
             ui.heading("Sim Events");
-            AnalysisPanel::event_ui(&self.sim_events, ui, self.current_time.into());
+            PlaybackPanel::event_ui(&self.sim_events, ui, self.current_time.into());
 
             ui.separator();
 
@@ -472,7 +492,7 @@ impl AnalysisPanel {
                     ui.separator();
                     ui.heading("Node Events");
 
-                    AnalysisPanel::event_ui(&self.node_events[id], ui, self.current_time.into());
+                    PlaybackPanel::event_ui(&self.node_events[id], ui, self.current_time.into());
                 }
                 InspectorTab::State => {
                     if let Some(ref mut live) = self.live_sim {
@@ -635,7 +655,6 @@ impl AnalysisPanel {
 
         let mut minutes = (self.current_time / 60.0).floor();
         let mut seconds = self.current_time % 60.0;
-        ui.spacing_mut().slider_width = 900.0;
 
         ui.style_mut().visuals.widgets.inactive = WidgetVisuals {
             bg_fill: item_background,
@@ -645,6 +664,7 @@ impl AnalysisPanel {
             fg_stroke: Stroke::new(1.0, main_red),
             expansion: 0.0,
         };
+        ui.spacing_mut().slider_width = ui.available_width() - 300.;
 
         let mins_slider = egui::Slider::new(&mut minutes, 0.0..=(self.end_time / 60.0).floor())
             .handle_shape(egui::style::HandleShape::Rect { aspect_ratio: 0.4 })

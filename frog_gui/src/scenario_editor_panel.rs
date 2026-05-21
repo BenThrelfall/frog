@@ -1,7 +1,7 @@
-use egui::{Color32, ComboBox, DragValue, Frame, Modal, RichText, Widget};
+use egui::{Color32, ComboBox, DragValue, Frame, Modal, RichText};
 
-use macroquad::prelude::*;
 use frogcore::{
+    node::ModelSelection,
     node_location::{NodeLocation, Point, Points, Timepoint},
     scenario::{
         MovementIndicator, Scenario, ScenarioIdentity, ScenarioMessage, ScenarioNodeSettings,
@@ -9,10 +9,12 @@ use frogcore::{
     simulation::models::PairWiseCaptureEffect,
     units::{DbPerLength, METRES, SECONDS, Temperature, Unit},
 };
+use macroquad::prelude::*;
 
 use super::Inspectable;
-use crate::{convert_rect, scene::SceneData};
+use crate::{GlobalAction, GuiStore, convert_rect, scene::SceneData};
 
+#[derive(Debug)]
 pub struct ScenarioEditorPanel {
     scene: SceneData,
     pub scenario: Scenario,
@@ -26,7 +28,11 @@ impl ScenarioEditorPanel {
     pub fn new(mut scenario: Scenario) -> ScenarioEditorPanel {
         let mut scene = SceneData::new();
         scenario.identity = ScenarioIdentity::Custom;
-        scene.zoom_to_fit(&scenario.map.display_locations(0.0 * SECONDS));
+        scene.zoom_to_fit(
+            &scenario.map.display_locations(0.0 * SECONDS),
+            screen_width(),
+            screen_height(),
+        );
 
         ScenarioEditorPanel {
             scene,
@@ -40,7 +46,11 @@ impl ScenarioEditorPanel {
 }
 
 pub fn new_scenario_and_panel() -> ScenarioEditorPanel {
-    ScenarioEditorPanel::new(Scenario {
+    ScenarioEditorPanel::new(default_scenario())
+}
+
+pub fn default_scenario() -> Scenario {
+    Scenario {
         identity: ScenarioIdentity::Custom,
         map: NodeLocation::Points(Points::new(vec![Timepoint {
             time: 0.0 * SECONDS,
@@ -52,12 +62,14 @@ pub fn new_scenario_and_panel() -> ScenarioEditorPanel {
         model: PairWiseCaptureEffect::default().into(),
         messages: vec![],
         settings: vec![ScenarioNodeSettings::default()],
-    })
+    }
 }
 
-impl Widget for &mut ScenarioEditorPanel {
-    fn ui(self, ui: &mut egui::Ui) -> egui::Response {
+impl ScenarioEditorPanel {
+    pub fn show(&mut self, ui: &mut egui::Ui, store: &mut GuiStore) -> egui::Response {
         let item_background = Color32::from_hex("#212121").unwrap();
+
+        let mut do_run_scenario = false;
 
         let Scenario {
             identity: _,
@@ -123,29 +135,47 @@ impl Widget for &mut ScenarioEditorPanel {
             }
         }
 
-        egui::SidePanel::left("Scenario Editor Inspector").show_inside(ui, |ui| {
-            node_setting_edit_panel(
-                &mut self.inspect_target,
-                settings,
-                model,
-                map,
-                &mut self.delete_node_pending,
-                ui,
-            );
+        egui::SidePanel::left(ui.id().with("Left panel")).show_inside(ui, |ui| {
+            egui::ScrollArea::vertical()
+                .id_salt("editor left scroll")
+                .show(ui, |ui| {
+                    node_setting_edit_panel(
+                        &mut self.inspect_target,
+                        settings,
+                        model,
+                        map,
+                        &mut self.delete_node_pending,
+                        ui,
+                    );
+                });
         });
 
-        egui::SidePanel::right("Scenario Editor Message Panel").show_inside(ui, |ui| {
-            egui::ScrollArea::vertical().show(ui, |ui| {
-                message_editor_panel(
-                    item_background,
-                    messages,
-                    &mut self.message_sender_filter,
-                    &mut self.message_target_filter,
-                    map,
-                    ui,
-                );
-            });
+        egui::SidePanel::right(ui.id().with("Right panel")).show_inside(ui, |ui| {
+            egui::ScrollArea::vertical()
+                .id_salt("editor right scroll")
+                .show(ui, |ui| {
+                    message_editor_panel(
+                        item_background,
+                        messages,
+                        &mut self.message_sender_filter,
+                        &mut self.message_target_filter,
+                        map,
+                        ui,
+                    );
+                });
         });
+
+        egui::TopBottomPanel::top(ui.id().with("Top panel")).show_inside(ui, |ui| {
+            ui.vertical_centered(|ui| {
+                if ui.button("Run").clicked() {
+                    do_run_scenario = true;
+                }
+            })
+        });
+
+        egui::TopBottomPanel::bottom(ui.id().with("Bottom panel"))
+            .min_height(30.)
+            .show_inside(ui, |ui| ui.label("Editor bottom panel"));
 
         let central_rect = egui::CentralPanel::default()
             .frame(Frame::NONE)
@@ -164,6 +194,13 @@ impl Widget for &mut ScenarioEditorPanel {
             ui,
         );
 
+        if do_run_scenario {
+            store.queue_action(GlobalAction::RunScenario(
+                self.scenario.clone(),
+                ModelSelection::Meshtastic.into(),
+            ));
+        }
+
         ui.response()
     }
 }
@@ -175,10 +212,23 @@ fn editor_scene(
     map: &mut Vec<Point>,
     ui: &mut egui::Ui,
 ) {
+    if scene_rect.y.is_infinite() {
+        return;
+    }
+
+    let Rect { x, y, w, h } = scene_rect;
+    scene.camera.viewport = Some((
+        x as i32,
+        (screen_height() - y - h) as i32,
+        w as i32,
+        h as i32,
+    ));
+
     scene.camera_control(scene_rect);
     scene.select_and_reposition_interaction(inspect_target, map, scene_rect);
 
     set_camera(&scene.camera);
+
     scene.render_grid();
     scene.render_nodes(inspect_target, None, map, ui, scene_rect);
     scene.render_scale_indicator(ui, scene_rect);
@@ -504,7 +554,7 @@ fn inspect_node(current_node: &mut ScenarioNodeSettings, point: &mut Point, ui: 
 
     ui.horizontal(|ui| {
         ui.label("Movement Indicator: ");
-        ComboBox::from_id_salt("Movement Indicator")
+        ComboBox::from_id_salt(format!("Movement Indicator"))
             .selected_text(format!("{:?}", current_node.movement_indicator))
             .show_ui(ui, |ui| {
                 for value in MovementIndicator::VALUES {
