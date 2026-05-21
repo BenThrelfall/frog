@@ -1,6 +1,5 @@
 use egui::{Color32, ComboBox, DragValue, Frame, Modal, RichText, Widget};
 
-use macroquad::prelude::*;
 use frogcore::{
     node_location::{NodeLocation, Point, Points, Timepoint},
     scenario::{
@@ -9,6 +8,7 @@ use frogcore::{
     simulation::models::PairWiseCaptureEffect,
     units::{DbPerLength, METRES, SECONDS, Temperature, Unit},
 };
+use macroquad::prelude::*;
 
 use super::Inspectable;
 use crate::{convert_rect, scene::SceneData};
@@ -40,7 +40,11 @@ impl ScenarioEditorPanel {
 }
 
 pub fn new_scenario_and_panel() -> ScenarioEditorPanel {
-    ScenarioEditorPanel::new(Scenario {
+    ScenarioEditorPanel::new(default_scenario())
+}
+
+pub fn default_scenario() -> Scenario {
+    Scenario {
         identity: ScenarioIdentity::Custom,
         map: NodeLocation::Points(Points::new(vec![Timepoint {
             time: 0.0 * SECONDS,
@@ -52,7 +56,7 @@ pub fn new_scenario_and_panel() -> ScenarioEditorPanel {
         model: PairWiseCaptureEffect::default().into(),
         messages: vec![],
         settings: vec![ScenarioNodeSettings::default()],
-    })
+    }
 }
 
 impl Widget for &mut ScenarioEditorPanel {

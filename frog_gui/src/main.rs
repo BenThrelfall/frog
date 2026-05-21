@@ -1,7 +1,10 @@
-use std::cell::RefCell;
 use std::sync::Arc;
+use std::{cell::RefCell, fmt::format};
 
-use egui::{CentralPanel, ComboBox, Frame, Modal, RichText, TopBottomPanel, vec2};
+use egui::{
+    CentralPanel, CollapsingHeader, ComboBox, Frame, Modal, RichText, SidePanel, TopBottomPanel,
+    Widget, vec2,
+};
 
 use frogcore::{
     node::{MODEL_LIST, ModelSelection},
@@ -14,8 +17,10 @@ use frogcore::{
 use macroquad::prelude::*;
 
 use crate::{
-    analysis_panel::AnalysisPanel, browser_panel::BrowserPanel,
-    scenario_editor_panel::ScenarioEditorPanel, scenario_generator_panel::ScenarioGeneratorPanel,
+    analysis_panel::AnalysisPanel,
+    browser_panel::BrowserPanel,
+    scenario_editor_panel::{ScenarioEditorPanel, default_scenario, new_scenario_and_panel},
+    scenario_generator_panel::ScenarioGeneratorPanel,
     style::dark_visuals,
 };
 
@@ -46,49 +51,61 @@ async fn main() {
         global_action: GlobalAction::None,
     }));
 
-    let (main_panel, editor_panel) = (None, Some(scenario_editor_panel::new_scenario_and_panel()));
-
-    let active_tab = if main_panel.is_some() {
-        Tabs::Analysis
-    } else {
-        Tabs::ScenarioEditor
-    };
-
-    let browser_panel = BrowserPanel::new(store.clone());
-    let generator_panel = ScenarioGeneratorPanel::new(store.clone());
-
     let app = MyApp {
-        main_panel,
-        active_tab,
-        editor_panel,
+        tabs: Vec::new(),
+        scenarios: Vec::new(),
+        active_tab: 0,
         save_path: "output.json".to_owned(),
         model_selection: ModelSelection::Meshtastic,
         new_modal_open: false,
         store,
-        browser_panel,
-        generator_panel,
+        renaming_scenario: None,
     };
 
     app.run().await;
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Tabs {
-    Analysis,
-    ScenarioEditor,
-    ScenarioGenerator,
-    Browser,
+struct Tab {
+    name: String,
+    body: TabBody,
+}
+
+enum TabBody {
+    Analysis(Box<AnalysisPanel>),
+    ScenarioEditor(Box<ScenarioEditorPanel>),
+    ScenarioGenerator(Box<ScenarioGeneratorPanel>),
+    Browser(Box<BrowserPanel>),
+}
+
+impl Tab {
+    fn show(&mut self, ui: &mut egui::Ui) -> egui::Response {
+        match &mut self.body {
+            TabBody::Analysis(analysis_panel) => ui.add(analysis_panel.as_mut()),
+            TabBody::ScenarioEditor(scenario_editor_panel) => {
+                ui.add(scenario_editor_panel.as_mut())
+            }
+            TabBody::ScenarioGenerator(scenario_generator_panel) => {
+                ui.add(scenario_generator_panel.as_mut())
+            }
+            TabBody::Browser(browser_panel) => ui.add(browser_panel.as_mut()),
+        }
+    }
+}
+
+struct LoadedScenario {
+    open_in_tab: Option<usize>,
+    scenario: Scenario,
+    name: String,
 }
 
 struct MyApp {
-    main_panel: Option<AnalysisPanel>,
-    editor_panel: Option<ScenarioEditorPanel>,
-    generator_panel: ScenarioGeneratorPanel,
-    browser_panel: BrowserPanel,
+    tabs: Vec<Tab>,
+    scenarios: Vec<LoadedScenario>,
     model_selection: ModelSelection,
     new_modal_open: bool,
-    active_tab: Tabs,
+    active_tab: usize,
     save_path: String,
+    renaming_scenario: Option<usize>,
     store: Arc<RefCell<GuiStore>>,
 }
 
@@ -114,173 +131,111 @@ impl MyApp {
             style.visuals = dark_visuals();
         });
 
-        TopBottomPanel::top("main_top")
-            .default_height(36.0)
+        SidePanel::left("mode_selector")
+            .default_width(80.0)
             .show(ctx, |ui| {
-                ui.horizontal_centered(|ui| {
-                    ui.allocate_ui_with_layout(
-                        vec2(200., 36.),
-                        egui::Layout::top_down(egui::Align::Center),
-                        |ui| {
-                            ui.label(RichText::new("Tabs").color(egui::Color32::GRAY));
-                            ui.horizontal(|ui| {
-                                if ui
-                                    .selectable_label(
-                                        self.active_tab == Tabs::ScenarioEditor,
-                                        "Editor",
-                                    )
-                                    .clicked()
-                                {
-                                    self.active_tab = Tabs::ScenarioEditor;
-                                }
-                                if ui
-                                    .selectable_label(
-                                        self.active_tab == Tabs::ScenarioGenerator,
-                                        "Generator",
-                                    )
-                                    .clicked()
-                                {
-                                    let timestamp = get_time().to_ne_bytes();
-                                    let seed = u64::from_ne_bytes(timestamp);
-                                    macroquad::rand::srand(seed);
-
-                                    self.active_tab = Tabs::ScenarioGenerator;
-                                }
-                                if ui
-                                    .selectable_label(self.active_tab == Tabs::Analysis, "Analysis")
-                                    .clicked()
-                                {
-                                    self.active_tab = Tabs::Analysis;
-                                }
-                                if ui
-                                    .selectable_label(self.active_tab == Tabs::Browser, "Browser")
-                                    .clicked()
-                                {
-                                    self.browser_panel.refresh();
-                                    self.active_tab = Tabs::Browser;
-                                }
-                            })
-                        },
-                    );
-                    ui.separator();
-
-                    ui.add_space(5.0);
-                    if ui.button("New Scenario").clicked() {
-                        self.new_modal_open = true;
-                    }
-                    ui.add_space(5.0);
-
-                    if self.new_modal_open {
-                        let modal = Modal::new("New Modal".into()).show(ui.ctx(), |ui| {
-                            ui.heading("Create new scenario? Current scenario will be discarded");
-
-                            ui.horizontal_centered(|ui| {
-                                if ui.button("Confirm").clicked() {
-                                    self.editor_panel =
-                                        Some(scenario_editor_panel::new_scenario_and_panel());
-                                    self.active_tab = Tabs::ScenarioEditor;
-                                    self.new_modal_open = false;
-                                };
-                                if ui.button("Cancel").clicked() {
-                                    self.new_modal_open = false;
-                                }
+                ui.vertical_centered(|ui| {
+                    ui.menu_button("Create New", |ui| {
+                        if ui.button("Empty Custom Scenario").clicked() {
+                            self.scenarios.push(LoadedScenario {
+                                open_in_tab: None,
+                                scenario: default_scenario(),
+                                name: "New Scenario".to_string(),
                             });
-                        });
-
-                        if modal.should_close() {
-                            self.new_modal_open = false;
+                            self.renaming_scenario = Some(self.scenarios.len() - 1);
+                            ui.close_menu();
                         }
-                    }
+                        if ui.button("Custom Scenario from Generator").clicked() {
+                            ui.close_menu();
+                        }
+                        if ui.button("Study").clicked() {
+                            ui.close_menu();
+                        }
+                    });
+                });
 
-                    if let Some(ref panel) = self.editor_panel {
-                        ui.vertical(|ui| {
-                            if ui.button("Save Scenario As:").clicked() {
-                                if let Err(e) = write_file(
-                                    self.save_path.clone().into(),
-                                    panel.scenario.clone(),
-                                    false,
-                                ) {
-                                    error!("{e}");
+                CollapsingHeader::new("Custom Scenarios")
+                    .default_open(true)
+                    .show(ui, |ui| {
+                        self.scenarios.iter_mut().enumerate().for_each(|(n, scen)| {
+                            if self.renaming_scenario.is_some_and(|x| x == n) {
+                                let name_input = ui.text_edit_singleline(&mut scen.name);
+
+                                if name_input.lost_focus() {
+                                    self.renaming_scenario = None;
                                 };
+
+                                if name_input.has_focus() == false {
+                                    name_input.request_focus();
+                                }
+
+                                return;
                             }
-                            ui.text_edit_singleline(&mut self.save_path);
-                        });
 
-                        ui.separator();
+                            let scen_button = ui.button(&scen.name);
 
-                        if ui.button("Run Scenario").clicked() {
-                            self.main_panel = Some(AnalysisPanel::from_scenario(
-                                panel.scenario.clone(),
-                                self.model_selection.into(),
-                            ));
-                            self.active_tab = Tabs::Analysis;
-                        }
+                            scen_button.context_menu(|ui| {
+                                if ui.button("Create copy").clicked() {
+                                    self
+                                    ui.close_menu();
+                                }
 
-                        ui.label("with");
-
-                        ComboBox::from_label("Model")
-                            .selected_text(format!("{:?}", self.model_selection))
-                            .show_ui(ui, |ui| {
-                                for model in MODEL_LIST {
-                                    ui.selectable_value(
-                                        &mut self.model_selection,
-                                        model,
-                                        format!("{:?}", model),
-                                    );
+                                if ui.button("Rename").clicked() {
+                                    self.renaming_scenario = Some(n);
+                                    ui.close_menu();
                                 }
                             });
-                    }
+
+                            if scen_button.clicked() {
+                                match scen.open_in_tab {
+                                    Some(tab_id) => self.active_tab = tab_id,
+                                    None => {
+                                        self.tabs.push(Tab {
+                                            name: scen.name.clone(),
+                                            body: TabBody::ScenarioEditor(Box::new(
+                                                ScenarioEditorPanel::new(scen.scenario.clone()),
+                                            )),
+                                        });
+                                        let tab_id = self.tabs.len() - 1;
+                                        scen.open_in_tab = Some(tab_id);
+                                        self.active_tab = tab_id;
+                                    }
+                                }
+                            }
+                        });
+                    });
+            });
+
+        CentralPanel::default().frame(Frame::NONE).show(ctx, |ui| {
+            TopBottomPanel::top("tab_bar").show_inside(ui, |ui| {
+                ui.horizontal(|ui| {
+                    self.tabs.iter().enumerate().for_each(|(n, tab)| {
+                        ui.selectable_value(&mut self.active_tab, n, &tab.name);
+                    });
                 });
             });
 
-        CentralPanel::default()
-            .frame(Frame::NONE)
-            .show(ctx, |ui| match self.active_tab {
-                Tabs::Analysis => {
-                    if let Some(ref mut panel) = self.main_panel {
-                        ui.add(panel);
-                    } else {
-                        ui.centered_and_justified(|ui| {
-                            ui.heading(
-                                "No active analysis.\nRun the current scenario from the top panel.",
-                            );
-                        });
-                    }
+            match self.tabs.get_mut(self.active_tab) {
+                Some(tab) => {
+                    tab.show(ui);
                 }
-                Tabs::ScenarioEditor => {
-                    if let Some(ref mut panel) = self.editor_panel {
-                        ui.add(panel);
-                    } else {
-                        ui.centered_and_justified(|ui| {
-                            ui.heading("No Active Scenario");
-                        });
-                    }
-                }
-                Tabs::Browser => {
-                    ui.add(&mut self.browser_panel);
-                }
-                Tabs::ScenarioGenerator => {
-                    ui.add(&mut self.generator_panel);
+                None => (),
+            }
+        });
+
+        self.store
+            .borrow_mut()
+            .global_action_queue
+            .drain(..)
+            .for_each(|action| match action {
+                GlobalAction::CreateScenario(name, scenario) => {
+                    self.scenarios.push(LoadedScenario {
+                        open_in_tab: None,
+                        scenario,
+                        name,
+                    })
                 }
             });
-
-        match &self.store.borrow().global_action {
-            GlobalAction::None => (),
-            GlobalAction::SetScenario(scenario) => {
-                self.editor_panel = Some(ScenarioEditorPanel::new(scenario.clone()));
-                self.active_tab = Tabs::ScenarioEditor;
-            }
-            GlobalAction::RunScenario(scenario) => {
-                self.editor_panel = Some(ScenarioEditorPanel::new(scenario.clone()));
-                self.main_panel = Some(AnalysisPanel::from_scenario(
-                    self.editor_panel.as_ref().unwrap().scenario.clone(),
-                    self.model_selection.into(),
-                ));
-                self.active_tab = Tabs::Analysis;
-            }
-        }
-
-        self.store.borrow_mut().global_action = GlobalAction::None;
     }
 }
 
@@ -288,14 +243,12 @@ impl MyApp {
 pub struct GuiStore {
     pub node_spacing: f32,
 
-    pub global_action: GlobalAction,
+    pub global_action_queue: Vec<GlobalAction>,
 }
 
 #[derive(Debug, Clone)]
 pub enum GlobalAction {
-    None,
-    SetScenario(Scenario),
-    RunScenario(Scenario),
+    CreateScenario(String, Scenario),
 }
 
 const BACK_TIME: Time = Time::from_seconds(1.0);
