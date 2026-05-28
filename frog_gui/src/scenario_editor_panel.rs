@@ -11,7 +11,7 @@ use frogcore::{
 use macroquad::prelude::*;
 
 use super::Inspectable;
-use crate::{convert_rect, scene::SceneData};
+use crate::{GuiStore, convert_rect, scene::SceneData};
 
 pub struct ScenarioEditorPanel {
     scene: SceneData,
@@ -23,10 +23,14 @@ pub struct ScenarioEditorPanel {
 }
 
 impl ScenarioEditorPanel {
+    pub fn big_red(&self) {
+       set_camera(&self.scene.camera); 
+       draw_rectangle(-1000., -1000., 10000., 10000., BLUE);
+    }
     pub fn new(mut scenario: Scenario) -> ScenarioEditorPanel {
         let mut scene = SceneData::new();
         scenario.identity = ScenarioIdentity::Custom;
-        scene.zoom_to_fit(&scenario.map.display_locations(0.0 * SECONDS));
+        scene.zoom_to_fit(&scenario.map.display_locations(0.0 * SECONDS), screen_width(), screen_height());
 
         ScenarioEditorPanel {
             scene,
@@ -59,8 +63,8 @@ pub fn default_scenario() -> Scenario {
     }
 }
 
-impl Widget for &mut ScenarioEditorPanel {
-    fn ui(self, ui: &mut egui::Ui) -> egui::Response {
+impl ScenarioEditorPanel {
+    pub fn show(&mut self, ui: &mut egui::Ui, store: &mut GuiStore, tab_id: u64) -> egui::Response {
         let item_background = Color32::from_hex("#212121").unwrap();
 
         let Scenario {
@@ -127,29 +131,38 @@ impl Widget for &mut ScenarioEditorPanel {
             }
         }
 
-        egui::SidePanel::left("Scenario Editor Inspector").show_inside(ui, |ui| {
-            node_setting_edit_panel(
-                &mut self.inspect_target,
-                settings,
-                model,
-                map,
-                &mut self.delete_node_pending,
-                ui,
-            );
-        });
-
-        egui::SidePanel::right("Scenario Editor Message Panel").show_inside(ui, |ui| {
-            egui::ScrollArea::vertical().show(ui, |ui| {
-                message_editor_panel(
-                    item_background,
-                    messages,
-                    &mut self.message_sender_filter,
-                    &mut self.message_target_filter,
+        egui::SidePanel::left(format!("Scenario Editor Inspector {tab_id}")).show_inside(
+            ui,
+            |ui| {
+                node_setting_edit_panel(
+                    &mut self.inspect_target,
+                    settings,
+                    model,
                     map,
+                    &mut self.delete_node_pending,
+                    tab_id,
                     ui,
                 );
-            });
-        });
+            },
+        );
+
+        egui::SidePanel::right(format!("Scenario Editor Message Panel {tab_id}")).show_inside(
+            ui,
+            |ui| {
+                egui::ScrollArea::vertical()
+                    .id_salt(format!("editor right scroll {tab_id}"))
+                    .show(ui, |ui| {
+                        message_editor_panel(
+                            item_background,
+                            messages,
+                            &mut self.message_sender_filter,
+                            &mut self.message_target_filter,
+                            map,
+                            ui,
+                        );
+                    });
+            },
+        );
 
         let central_rect = egui::CentralPanel::default()
             .frame(Frame::NONE)
@@ -179,13 +192,22 @@ fn editor_scene(
     map: &mut Vec<Point>,
     ui: &mut egui::Ui,
 ) {
+    if scene_rect.y.is_infinite() {
+        return;
+    }
+
+    let Rect { x, y, w, h } = scene_rect;
+    scene.camera.viewport = Some((x as i32, (screen_height() - y - h) as i32, w as i32, h as i32));
+
     scene.camera_control(scene_rect);
     scene.select_and_reposition_interaction(inspect_target, map, scene_rect);
 
     set_camera(&scene.camera);
+
     scene.render_grid();
     scene.render_nodes(inspect_target, None, map, ui, scene_rect);
     scene.render_scale_indicator(ui, scene_rect);
+
 }
 
 fn message_editor_panel(
@@ -345,6 +367,7 @@ fn node_setting_edit_panel(
     model: &mut frogcore::simulation::models::TransmissionModel,
     map: &mut Vec<Point>,
     modal_open: &mut Option<usize>,
+    tab_id: u64,
     ui: &mut egui::Ui,
 ) {
     ui.heading("Node Editor");
@@ -368,7 +391,7 @@ fn node_setting_edit_panel(
                     *inspect_target = Inspectable::Nothing;
                 }
             });
-            inspect_node(&mut settings[id], &mut map[id], ui);
+            inspect_node(&mut settings[id], &mut map[id], tab_id, ui);
             ui.add_space(5.0);
             if ui.button("Delete Node").clicked() {
                 *modal_open = Some(id);
@@ -421,7 +444,7 @@ fn node_setting_edit_panel(
 
         ui.horizontal(|ui| {
             ui.label("Pathloss Model");
-            ComboBox::from_id_salt(603456)
+            ComboBox::from_id_salt(603456 + tab_id)
                 .selected_text(pathloss_label)
                 .show_ui(ui, |ui| {
                     if ui
@@ -485,7 +508,12 @@ fn node_setting_edit_panel(
     }
 }
 
-fn inspect_node(current_node: &mut ScenarioNodeSettings, point: &mut Point, ui: &mut egui::Ui) {
+fn inspect_node(
+    current_node: &mut ScenarioNodeSettings,
+    point: &mut Point,
+    tab_id: u64,
+    ui: &mut egui::Ui,
+) {
     ui.add_space(5.0);
     ui.horizontal(|ui| {
         ui.label("Position");
@@ -508,7 +536,7 @@ fn inspect_node(current_node: &mut ScenarioNodeSettings, point: &mut Point, ui: 
 
     ui.horizontal(|ui| {
         ui.label("Movement Indicator: ");
-        ComboBox::from_id_salt("Movement Indicator")
+        ComboBox::from_id_salt(format!("Movement Indicator {tab_id}"))
             .selected_text(format!("{:?}", current_node.movement_indicator))
             .show_ui(ui, |ui| {
                 for value in MovementIndicator::VALUES {

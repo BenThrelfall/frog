@@ -1,7 +1,4 @@
-use std::{cell::RefCell, sync::Arc};
-
-use egui::{ComboBox, DragValue, Frame, RichText, Widget};
-use macroquad::prelude::rand;
+use egui::{ComboBox, DragValue, Frame, RichText};
 use frogcore::{
     scenario::{
         ScenarioIdentity,
@@ -16,6 +13,7 @@ use frogcore::{
     },
     units::{KM, METRES, MINS, MPS},
 };
+use macroquad::prelude::rand;
 
 use crate::{GlobalAction, GuiStore, components::UiExt};
 
@@ -42,7 +40,6 @@ pub struct ScenarioGeneratorPanel {
     seed: u64,
     generator: ScenarioGenerator,
     generator_selection: GeneratorSelection,
-    store: Arc<RefCell<GuiStore>>,
 
     // Random Placement
     rp_node_count: usize,
@@ -58,7 +55,7 @@ pub struct ScenarioGeneratorPanel {
 }
 
 impl ScenarioGeneratorPanel {
-    pub fn new(store: Arc<RefCell<GuiStore>>) -> Self {
+    pub fn new() -> Self {
         ScenarioGeneratorPanel {
             generator: ScenarioGenerator::RandomSquare {
                 positioning: IndependentPositionFrames {
@@ -83,7 +80,6 @@ impl ScenarioGeneratorPanel {
                 gateways_move: false,
             },
             seed: 1,
-            store,
             generator_selection: GeneratorSelection::RandomSquare,
             rp_node_count: 10,
             rp_side_len: 5000.,
@@ -95,8 +91,8 @@ impl ScenarioGeneratorPanel {
     }
 }
 
-impl Widget for &mut ScenarioGeneratorPanel {
-    fn ui(self, ui: &mut egui::Ui) -> egui::Response {
+impl ScenarioGeneratorPanel {
+    pub fn show(&mut self, ui: &mut egui::Ui, store: &mut GuiStore) -> egui::Response {
         Frame::new().outer_margin(20).show(ui, |ui| {
             ui.label(RichText::new("Simple Generators").heading().size(32.));
 
@@ -109,7 +105,8 @@ impl Widget for &mut ScenarioGeneratorPanel {
                 col1.unit_edit("Area Side Length", &mut self.rp_side_len, "m");
 
                 if col1.button("Generate").clicked() {
-                    self.store.borrow_mut().global_action = GlobalAction::SetScenario(
+                    store.queue_action(GlobalAction::CreateScenario(
+                        "New Scenario".to_string(),
                         ScenarioIdentity::Generated {
                             generator: ScenarioGenerator::RandomSquare {
                                 node_count: self.rp_node_count,
@@ -128,7 +125,7 @@ impl Widget for &mut ScenarioGeneratorPanel {
                             seed: rand::rand() as u64,
                         }
                         .create(),
-                    )
+                    ));
                 }
 
                 col2.heading("Pathways");
@@ -140,7 +137,7 @@ impl Widget for &mut ScenarioGeneratorPanel {
                 col2.unit_edit("Area Side Length", &mut self.paths_side_len, "m");
 
                 if col2.button("Generate").clicked() {
-                    self.store.borrow_mut().global_action = GlobalAction::RunScenario(
+                    store.queue_action(GlobalAction::CreateScenario("New Scenario".to_string(), 
                         ScenarioIdentity::Generated {
                             generator: ScenarioGenerator::PathwaysOne {
                                 passive_key_points: 8,
@@ -164,7 +161,7 @@ impl Widget for &mut ScenarioGeneratorPanel {
                             seed: rand::rand() as u64,
                         }
                         .create(),
-                    )
+                    ))
                 }
 
                 col3.heading("Graph");
@@ -175,7 +172,7 @@ impl Widget for &mut ScenarioGeneratorPanel {
                 col3.numeric_edit("Minimum Degree: ", &mut self.graph_min_degree);
 
                 if col3.button("Generate").clicked() {
-                    self.store.borrow_mut().global_action = GlobalAction::RunScenario(
+                    store.queue_action(GlobalAction::CreateScenario("New Scenario".to_string(),
                         ScenarioIdentity::Generated {
                             generator: ScenarioGenerator::PsudoSpatialGraph {
                                 nodes: self.graph_node_count,
@@ -186,7 +183,7 @@ impl Widget for &mut ScenarioGeneratorPanel {
                             seed: rand::rand() as u64,
                         }
                         .create(),
-                    )
+                    ))
                 }
             });
 
@@ -197,13 +194,13 @@ impl Widget for &mut ScenarioGeneratorPanel {
 
             ui.horizontal(|ui| {
                 if ui.button("Generate").clicked() {
-                    self.store.borrow_mut().global_action = GlobalAction::SetScenario(
+                    store.queue_action(GlobalAction::CreateScenario("New Scenario".to_string(),
                         ScenarioIdentity::Generated {
                             generator: self.generator.clone(),
                             seed: self.seed,
                         }
                         .create(),
-                    )
+                    ))
                 }
 
                 ui.label("with seed: ");

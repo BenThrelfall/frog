@@ -80,7 +80,11 @@ impl AnalysisPanel {
         let transmission_graphs = create_transmission_graphs(sim_events.clone());
 
         let mut scene = SceneData::new();
-        scene.zoom_to_fit(&node_locations.display_locations(Time::from_seconds(0.0)));
+        scene.zoom_to_fit(
+            &node_locations.display_locations(Time::from_seconds(0.0)),
+            screen_width(),
+            screen_height(),
+        );
 
         AnalysisPanel {
             node_locations,

@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
-use macroquad::prelude::*;
 use frogcore::{node_location::Point, units::Length};
+use macroquad::prelude::*;
 
 use crate::Inspectable;
 
@@ -30,7 +30,7 @@ impl SceneData {
         }
     }
 
-    pub fn zoom_to_fit(&mut self, map: &Vec<Point>) {
+    pub fn zoom_to_fit(&mut self, map: &Vec<Point>, view_width: f32, view_height: f32) {
         let (mut min_x, mut min_y, mut max_x, mut max_y) = (f32::MAX, f32::MAX, f32::MIN, f32::MIN);
 
         for point in map.iter() {
@@ -43,20 +43,20 @@ impl SceneData {
             max_y = max_y.max(y);
         }
 
-        let x_factor = (screen_width()) / (max_x - min_x).max(10.);
-        let y_factor = (screen_height()) / (max_y - min_y).max(10.);
+        let x_factor = (view_width) / (max_x - min_x).max(10.);
+        let y_factor = (view_height) / (max_y - min_y).max(10.);
 
         self.camera.target = vec2((max_x + min_x) / 2., (max_y + min_y) / 2.);
         self.zoom_level = x_factor.min(y_factor);
         self.zoom_level = self.zoom_level.clamp(0.1, 10.0);
-        self.camera.zoom = vec2(
-            self.zoom_level / screen_width(),
-            self.zoom_level / screen_height(),
-        );
     }
 
     pub fn camera_control(&mut self, scene_rect: Rect) {
         if !scene_rect.contains(mouse_position().into()) {
+            self.camera.zoom = vec2(
+                self.zoom_level / scene_rect.w,
+                self.zoom_level / scene_rect.h,
+            );
             return;
         }
 
@@ -70,12 +70,9 @@ impl SceneData {
 
         self.zoom_level = self.zoom_level.clamp(0.1, 10.0);
         self.camera.zoom = vec2(
-            self.zoom_level / screen_width(),
-            self.zoom_level / screen_height(),
+            self.zoom_level / scene_rect.w,
+            self.zoom_level / scene_rect.h,
         );
-
-        let delta = mouse_pos - self.world_mouse_pos();
-        self.camera.target += delta;
 
         //Handling Panning
         match (self.panning, middle_click) {

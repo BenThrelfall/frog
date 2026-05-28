@@ -1,15 +1,8 @@
-use std::sync::Arc;
-use std::{cell::RefCell, fmt::format};
+use egui::{CentralPanel, CollapsingHeader, Color32, Frame, Margin, SidePanel};
 
-use egui::{
-    CentralPanel, CollapsingHeader, ComboBox, Frame, Modal, RichText, SidePanel, TopBottomPanel,
-    Widget, vec2,
-};
-
+use egui_dock::{DockArea, DockState, SurfaceIndex, TabViewer};
 use frogcore::{
-    node::{MODEL_LIST, ModelSelection},
     scenario::Scenario,
-    sim_file::write_file,
     simulation::{MessageContent, data_structs::LogItem},
     units::Time,
 };
@@ -18,14 +11,12 @@ use macroquad::prelude::*;
 
 use crate::{
     analysis_panel::AnalysisPanel,
-    browser_panel::BrowserPanel,
-    scenario_editor_panel::{ScenarioEditorPanel, default_scenario, new_scenario_and_panel},
+    scenario_editor_panel::{ScenarioEditorPanel, default_scenario},
     scenario_generator_panel::ScenarioGeneratorPanel,
     style::dark_visuals,
 };
 
 pub mod analysis_panel;
-pub mod browser_panel;
 mod components;
 pub mod scenario_editor_panel;
 mod scenario_generator_panel;
@@ -46,18 +37,16 @@ fn window_conf() -> macroquad::conf::Conf {
 
 #[macroquad::main(window_conf)]
 async fn main() {
-    let store = Arc::new(RefCell::new(GuiStore {
+    let store = GuiStore {
         node_spacing: 1.0,
-        global_action: GlobalAction::None,
-    }));
+        global_action_queue: Vec::new(),
+        next_id: 0,
+    };
 
     let app = MyApp {
-        tabs: Vec::new(),
+        tabs: DockState::new(Vec::new()),
         scenarios: Vec::new(),
         active_tab: 0,
-        save_path: "output.json".to_owned(),
-        model_selection: ModelSelection::Meshtastic,
-        new_modal_open: false,
         store,
         renaming_scenario: None,
     };
@@ -65,7 +54,8 @@ async fn main() {
     app.run().await;
 }
 
-struct Tab {
+pub struct Tab {
+    id: u64,
     name: String,
     body: TabBody,
 }
@@ -74,39 +64,35 @@ enum TabBody {
     Analysis(Box<AnalysisPanel>),
     ScenarioEditor(Box<ScenarioEditorPanel>),
     ScenarioGenerator(Box<ScenarioGeneratorPanel>),
-    Browser(Box<BrowserPanel>),
 }
 
 impl Tab {
-    fn show(&mut self, ui: &mut egui::Ui) -> egui::Response {
-        match &mut self.body {
+    fn show(&mut self, ui: &mut egui::Ui, store: &mut GuiStore) -> egui::Response {
+        ui.push_id(self.id, |ui| match &mut self.body {
             TabBody::Analysis(analysis_panel) => ui.add(analysis_panel.as_mut()),
             TabBody::ScenarioEditor(scenario_editor_panel) => {
-                ui.add(scenario_editor_panel.as_mut())
+                scenario_editor_panel.show(ui, store, self.id)
             }
             TabBody::ScenarioGenerator(scenario_generator_panel) => {
-                ui.add(scenario_generator_panel.as_mut())
+                scenario_generator_panel.show(ui, store)
             }
-            TabBody::Browser(browser_panel) => ui.add(browser_panel.as_mut()),
-        }
+        })
+        .response
     }
 }
 
 struct LoadedScenario {
-    open_in_tab: Option<usize>,
+    open_in_tab: Option<u64>,
     scenario: Scenario,
     name: String,
 }
 
 struct MyApp {
-    tabs: Vec<Tab>,
+    tabs: DockState<Tab>,
     scenarios: Vec<LoadedScenario>,
-    model_selection: ModelSelection,
-    new_modal_open: bool,
-    active_tab: usize,
-    save_path: String,
+    active_tab: u64,
     renaming_scenario: Option<usize>,
-    store: Arc<RefCell<GuiStore>>,
+    store: GuiStore,
 }
 
 impl MyApp {
@@ -176,7 +162,6 @@ impl MyApp {
 
                             scen_button.context_menu(|ui| {
                                 if ui.button("Create copy").clicked() {
-                                    self
                                     ui.close_menu();
                                 }
 
@@ -188,17 +173,22 @@ impl MyApp {
 
                             if scen_button.clicked() {
                                 match scen.open_in_tab {
-                                    Some(tab_id) => self.active_tab = tab_id,
+                                    Some(tab_id) => {
+                                        let ni =
+                                            self.tabs.iter_all_nodes_mut().find(|(_, node)| {
+                                                node.iter_tabs().any(|tab| tab.id == tab_id)
+                                            });
+                                    }
                                     None => {
-                                        self.tabs.push(Tab {
+                                        let tab_id = self.store.new_id();
+                                        self.tabs.push_to_focused_leaf(Tab {
+                                            id: tab_id,
                                             name: scen.name.clone(),
                                             body: TabBody::ScenarioEditor(Box::new(
                                                 ScenarioEditorPanel::new(scen.scenario.clone()),
                                             )),
                                         });
-                                        let tab_id = self.tabs.len() - 1;
                                         scen.open_in_tab = Some(tab_id);
-                                        self.active_tab = tab_id;
                                     }
                                 }
                             }
@@ -207,24 +197,16 @@ impl MyApp {
             });
 
         CentralPanel::default().frame(Frame::NONE).show(ctx, |ui| {
-            TopBottomPanel::top("tab_bar").show_inside(ui, |ui| {
-                ui.horizontal(|ui| {
-                    self.tabs.iter().enumerate().for_each(|(n, tab)| {
-                        ui.selectable_value(&mut self.active_tab, n, &tab.name);
-                    });
-                });
-            });
-
-            match self.tabs.get_mut(self.active_tab) {
-                Some(tab) => {
-                    tab.show(ui);
-                }
-                None => (),
-            }
+            let mut style = egui_dock::Style::from_egui(ui.style());
+            style.tab.tab_body.inner_margin = Margin::ZERO;
+            DockArea::new(&mut self.tabs)
+                .style(style)
+                .show_leaf_collapse_buttons(false)
+                .show_leaf_close_all_buttons(false)
+                .show_inside(ui, &mut self.store);
         });
 
         self.store
-            .borrow_mut()
             .global_action_queue
             .drain(..)
             .for_each(|action| match action {
@@ -242,8 +224,89 @@ impl MyApp {
 #[derive(Debug, Clone)]
 pub struct GuiStore {
     pub node_spacing: f32,
-
+    pub next_id: u64,
     pub global_action_queue: Vec<GlobalAction>,
+}
+
+impl GuiStore {
+    pub fn new_id(&mut self) -> u64 {
+        let output = self.next_id;
+        self.next_id += 1;
+        output
+    }
+
+    pub fn queue_action(&mut self, action: GlobalAction) {
+        self.global_action_queue.push(action);
+    }
+}
+
+impl TabViewer for GuiStore {
+    type Tab = self::Tab;
+
+    fn title(&mut self, tab: &mut Self::Tab) -> egui::WidgetText {
+        tab.name.as_str().into()
+    }
+
+    fn ui(&mut self, ui: &mut egui::Ui, tab: &mut Self::Tab) {
+        tab.show(ui, self);
+    }
+
+    fn context_menu(
+        &mut self,
+        _ui: &mut egui::Ui,
+        _tab: &mut Self::Tab,
+        _surface: egui_dock::SurfaceIndex,
+        _node: egui_dock::NodeIndex,
+    ) {
+    }
+
+    fn id(&mut self, tab: &mut Self::Tab) -> egui::Id {
+        egui::Id::new(tab.id)
+    }
+
+    fn on_tab_button(&mut self, _tab: &mut Self::Tab, _response: &egui::Response) {}
+
+    fn closeable(&mut self, _tab: &mut Self::Tab) -> bool {
+        true
+    }
+
+    fn on_close(&mut self, _tab: &mut Self::Tab) -> bool {
+        true
+    }
+
+    fn on_add(&mut self, _surface: egui_dock::SurfaceIndex, _node: egui_dock::NodeIndex) {}
+
+    fn add_popup(
+        &mut self,
+        _ui: &mut egui::Ui,
+        _surface: egui_dock::SurfaceIndex,
+        _node: egui_dock::NodeIndex,
+    ) {
+    }
+
+    fn force_close(&mut self, _tab: &mut Self::Tab) -> bool {
+        false
+    }
+
+    fn tab_style_override(
+        &self,
+        _tab: &Self::Tab,
+        _global_style: &egui_dock::TabStyle,
+    ) -> Option<egui_dock::TabStyle> {
+        None
+    }
+
+    fn allowed_in_windows(&self, _tab: &mut Self::Tab) -> bool {
+        false
+    }
+
+    fn clear_background(&self, _tab: &Self::Tab) -> bool {
+        false
+    }
+
+    fn scroll_bars(&self, _tab: &Self::Tab) -> [bool; 2] {
+        [true, true]
+    }
 }
 
 #[derive(Debug, Clone)]
