@@ -1,3 +1,5 @@
+use std::mem::transmute;
+
 use egui::{CentralPanel, CollapsingHeader, Color32, Frame, Margin, SidePanel};
 
 use egui_dock::{DockArea, DockState, SurfaceIndex, TabViewer};
@@ -8,6 +10,7 @@ use frogcore::{
 };
 
 use macroquad::prelude::*;
+use slotmap::{SlotMap, new_key_type};
 
 use crate::{
     analysis_panel::AnalysisPanel,
@@ -43,23 +46,29 @@ async fn main() {
         next_id: 0,
     };
 
+    let tab_display = TabDisplay {
+        store,
+        tabs: SlotMap::with_key(),
+    };
+
     let app = MyApp {
         tabs: DockState::new(Vec::new()),
         scenarios: Vec::new(),
         active_tab: 0,
-        store,
+        tab_display,
         renaming_scenario: None,
     };
 
     app.run().await;
 }
 
+#[derive(Debug)]
 pub struct Tab {
-    id: u64,
     name: String,
     body: TabBody,
 }
 
+#[derive(Debug)]
 enum TabBody {
     Analysis(Box<AnalysisPanel>),
     ScenarioEditor(Box<ScenarioEditorPanel>),
@@ -67,12 +76,10 @@ enum TabBody {
 }
 
 impl Tab {
-    fn show(&mut self, ui: &mut egui::Ui, store: &mut GuiStore) -> egui::Response {
-        ui.push_id(self.id, |ui| match &mut self.body {
+    fn show(&mut self, id: TabKey, ui: &mut egui::Ui, store: &mut GuiStore) -> egui::Response {
+        ui.push_id(id, |ui| match &mut self.body {
             TabBody::Analysis(analysis_panel) => ui.add(analysis_panel.as_mut()),
-            TabBody::ScenarioEditor(scenario_editor_panel) => {
-                scenario_editor_panel.show(ui, store, self.id)
-            }
+            TabBody::ScenarioEditor(scenario_editor_panel) => scenario_editor_panel.show(ui, store),
             TabBody::ScenarioGenerator(scenario_generator_panel) => {
                 scenario_generator_panel.show(ui, store)
             }
@@ -82,17 +89,17 @@ impl Tab {
 }
 
 struct LoadedScenario {
-    open_in_tab: Option<u64>,
+    open_in_tab: Option<TabKey>,
     scenario: Scenario,
     name: String,
 }
 
 struct MyApp {
-    tabs: DockState<Tab>,
+    tabs: DockState<TabKey>,
     scenarios: Vec<LoadedScenario>,
     active_tab: u64,
     renaming_scenario: Option<usize>,
-    store: GuiStore,
+    tab_display: TabDisplay,
 }
 
 impl MyApp {
@@ -174,20 +181,19 @@ impl MyApp {
                             if scen_button.clicked() {
                                 match scen.open_in_tab {
                                     Some(tab_id) => {
-                                        let ni =
-                                            self.tabs.iter_all_nodes_mut().find(|(_, node)| {
-                                                node.iter_tabs().any(|tab| tab.id == tab_id)
-                                            });
+                                        match self.tabs.find_tab(&tab_id) {
+                                            Some(indices) => self.tabs.set_active_tab(indices),
+                                            None => self.tabs.push_to_focused_leaf(tab_id),
+                                        };
                                     }
                                     None => {
-                                        let tab_id = self.store.new_id();
-                                        self.tabs.push_to_focused_leaf(Tab {
-                                            id: tab_id,
+                                        let tab_id = self.tab_display.tabs.insert(Tab {
                                             name: scen.name.clone(),
                                             body: TabBody::ScenarioEditor(Box::new(
                                                 ScenarioEditorPanel::new(scen.scenario.clone()),
                                             )),
                                         });
+                                        self.tabs.push_to_focused_leaf(tab_id);
                                         scen.open_in_tab = Some(tab_id);
                                     }
                                 }
@@ -203,10 +209,11 @@ impl MyApp {
                 .style(style)
                 .show_leaf_collapse_buttons(false)
                 .show_leaf_close_all_buttons(false)
-                .show_inside(ui, &mut self.store);
+                .show_inside(ui, &mut self.tab_display);
         });
 
-        self.store
+        self.tab_display
+            .store
             .global_action_queue
             .drain(..)
             .for_each(|action| match action {
@@ -221,7 +228,17 @@ impl MyApp {
     }
 }
 
-#[derive(Debug, Clone)]
+new_key_type! {
+    pub struct TabKey;
+}
+
+#[derive(Debug)]
+pub struct TabDisplay {
+    pub store: GuiStore,
+    pub tabs: SlotMap<TabKey, Tab>,
+}
+
+#[derive(Debug)]
 pub struct GuiStore {
     pub node_spacing: f32,
     pub next_id: u64,
@@ -240,15 +257,18 @@ impl GuiStore {
     }
 }
 
-impl TabViewer for GuiStore {
-    type Tab = self::Tab;
+impl TabViewer for TabDisplay {
+    type Tab = self::TabKey;
 
     fn title(&mut self, tab: &mut Self::Tab) -> egui::WidgetText {
-        tab.name.as_str().into()
+        self.tabs.get(*tab).unwrap().name.as_str().into()
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, tab: &mut Self::Tab) {
-        tab.show(ui, self);
+        self.tabs
+            .get_mut(*tab)
+            .unwrap()
+            .show(*tab, ui, &mut self.store);
     }
 
     fn context_menu(
@@ -261,7 +281,7 @@ impl TabViewer for GuiStore {
     }
 
     fn id(&mut self, tab: &mut Self::Tab) -> egui::Id {
-        egui::Id::new(tab.id)
+        egui::Id::new(tab)
     }
 
     fn on_tab_button(&mut self, _tab: &mut Self::Tab, _response: &egui::Response) {}

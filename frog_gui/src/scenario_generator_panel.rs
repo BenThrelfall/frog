@@ -36,6 +36,7 @@ const GENERATOR_LIST: [GeneratorSelection; 6] = [
     GeneratorSelection::RandomTilConnectedGraph,
 ];
 
+#[derive(Debug)]
 pub struct ScenarioGeneratorPanel {
     seed: u64,
     generator: ScenarioGenerator,

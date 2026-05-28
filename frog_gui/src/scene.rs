@@ -5,6 +5,7 @@ use macroquad::prelude::*;
 
 use crate::Inspectable;
 
+#[derive(Debug)]
 pub struct SceneData {
     pub camera: Camera2D,
     pub zoom_level: f32,

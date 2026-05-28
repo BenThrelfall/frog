@@ -13,6 +13,7 @@ use macroquad::prelude::*;
 use super::Inspectable;
 use crate::{GuiStore, convert_rect, scene::SceneData};
 
+#[derive(Debug)]
 pub struct ScenarioEditorPanel {
     scene: SceneData,
     pub scenario: Scenario,
@@ -64,7 +65,7 @@ pub fn default_scenario() -> Scenario {
 }
 
 impl ScenarioEditorPanel {
-    pub fn show(&mut self, ui: &mut egui::Ui, store: &mut GuiStore, tab_id: u64) -> egui::Response {
+    pub fn show(&mut self, ui: &mut egui::Ui, store: &mut GuiStore) -> egui::Response {
         let item_background = Color32::from_hex("#212121").unwrap();
 
         let Scenario {
@@ -131,7 +132,7 @@ impl ScenarioEditorPanel {
             }
         }
 
-        egui::SidePanel::left(format!("Scenario Editor Inspector {tab_id}")).show_inside(
+        egui::SidePanel::left(ui.id().with("Left panel")).show_inside(
             ui,
             |ui| {
                 node_setting_edit_panel(
@@ -140,17 +141,16 @@ impl ScenarioEditorPanel {
                     model,
                     map,
                     &mut self.delete_node_pending,
-                    tab_id,
                     ui,
                 );
             },
         );
 
-        egui::SidePanel::right(format!("Scenario Editor Message Panel {tab_id}")).show_inside(
+        egui::SidePanel::right(ui.id().with("Right panel")).show_inside(
             ui,
             |ui| {
                 egui::ScrollArea::vertical()
-                    .id_salt(format!("editor right scroll {tab_id}"))
+                    .id_salt(format!("editor right scroll"))
                     .show(ui, |ui| {
                         message_editor_panel(
                             item_background,
@@ -367,7 +367,6 @@ fn node_setting_edit_panel(
     model: &mut frogcore::simulation::models::TransmissionModel,
     map: &mut Vec<Point>,
     modal_open: &mut Option<usize>,
-    tab_id: u64,
     ui: &mut egui::Ui,
 ) {
     ui.heading("Node Editor");
@@ -391,7 +390,7 @@ fn node_setting_edit_panel(
                     *inspect_target = Inspectable::Nothing;
                 }
             });
-            inspect_node(&mut settings[id], &mut map[id], tab_id, ui);
+            inspect_node(&mut settings[id], &mut map[id], ui);
             ui.add_space(5.0);
             if ui.button("Delete Node").clicked() {
                 *modal_open = Some(id);
@@ -444,7 +443,7 @@ fn node_setting_edit_panel(
 
         ui.horizontal(|ui| {
             ui.label("Pathloss Model");
-            ComboBox::from_id_salt(603456 + tab_id)
+            ComboBox::from_id_salt(603456)
                 .selected_text(pathloss_label)
                 .show_ui(ui, |ui| {
                     if ui
@@ -511,7 +510,6 @@ fn node_setting_edit_panel(
 fn inspect_node(
     current_node: &mut ScenarioNodeSettings,
     point: &mut Point,
-    tab_id: u64,
     ui: &mut egui::Ui,
 ) {
     ui.add_space(5.0);
@@ -536,7 +534,7 @@ fn inspect_node(
 
     ui.horizontal(|ui| {
         ui.label("Movement Indicator: ");
-        ComboBox::from_id_salt(format!("Movement Indicator {tab_id}"))
+        ComboBox::from_id_salt(format!("Movement Indicator"))
             .selected_text(format!("{:?}", current_node.movement_indicator))
             .show_ui(ui, |ui| {
                 for value in MovementIndicator::VALUES {

@@ -30,6 +30,7 @@ enum InspectorTab {
     State,
 }
 
+#[derive(Debug)]
 pub struct AnalysisPanel {
     scene: SceneData,
     node_locations: NodeLocation,
