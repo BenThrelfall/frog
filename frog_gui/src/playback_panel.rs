@@ -1,6 +1,6 @@
 use egui::{
     Align, Color32, CornerRadius, DragValue, Frame, Label, Layout, Pos2, RichText, ScrollArea,
-    Stroke, Widget, style::WidgetVisuals,
+    Stroke, style::WidgetVisuals,
 };
 
 use std::collections::{HashMap, HashSet};
@@ -31,7 +31,7 @@ enum InspectorTab {
 }
 
 #[derive(Debug)]
-pub struct AnalysisPanel {
+pub struct PlaybackPanel {
     scene: SceneData,
     node_locations: NodeLocation,
     node_settings: Vec<ScenarioNodeSettings>,
@@ -57,8 +57,8 @@ pub struct AnalysisPanel {
     live_sim: Option<LiveSimulation>,
 }
 
-impl AnalysisPanel {
-    pub fn new(scenario: Scenario, results: SimOutput) -> AnalysisPanel {
+impl PlaybackPanel {
+    pub fn new(scenario: Scenario, results: SimOutput) -> PlaybackPanel {
         let CompleteAnalysis {
             node_settings,
             node_events,
@@ -87,7 +87,7 @@ impl AnalysisPanel {
             screen_height(),
         );
 
-        AnalysisPanel {
+        PlaybackPanel {
             node_locations,
             node_settings,
             node_events,
@@ -114,11 +114,11 @@ impl AnalysisPanel {
         }
     }
 
-    pub fn from_scenario(scenario: Scenario, model: NodeModel) -> AnalysisPanel {
+    pub fn from_scenario(scenario: Scenario, model: NodeModel) -> PlaybackPanel {
         let live = LiveSimulation::new(12345, scenario.clone(), model.clone(), true);
         let sim_output = run_simulation(12345, scenario.clone(), model, true);
 
-        let mut out = AnalysisPanel::new(scenario, sim_output);
+        let mut out = PlaybackPanel::new(scenario, sim_output);
 
         out.live_sim = Some(live);
 
@@ -139,8 +139,8 @@ impl AnalysisPanel {
     }
 }
 
-impl Widget for &mut AnalysisPanel {
-    fn ui(self, ui: &mut egui::Ui) -> egui::Response {
+impl PlaybackPanel {
+    pub fn show(&mut self, ui: &mut egui::Ui) -> egui::Response {
         let node_locations = self
             .node_locations
             .display_locations(Time::from_seconds(self.current_time));
@@ -184,13 +184,25 @@ impl Widget for &mut AnalysisPanel {
     }
 }
 
-impl AnalysisPanel {
+impl PlaybackPanel {
     fn analysis_scene_panel(
         &mut self,
         node_locations: Vec<frogcore::node_location::Point>,
         ui: &mut egui::Ui,
         scene_rect: Rect,
     ) {
+        if scene_rect.y.is_infinite() {
+            return;
+        }
+
+        let Rect { x, y, w, h } = scene_rect;
+        self.scene.camera.viewport = Some((
+            x as i32,
+            (screen_height() - y - h) as i32,
+            w as i32,
+            h as i32,
+        ));
+
         self.scene.camera_control(scene_rect);
         self.scene
             .select_interaction(&mut self.inspect_target, &node_locations, scene_rect);
@@ -331,7 +343,7 @@ impl AnalysisPanel {
 
         ScrollArea::vertical().show(ui, |ui| {
             ui.heading("Sim Events");
-            AnalysisPanel::event_ui(&self.sim_events, ui, self.current_time.into());
+            PlaybackPanel::event_ui(&self.sim_events, ui, self.current_time.into());
 
             ui.separator();
 
@@ -477,7 +489,7 @@ impl AnalysisPanel {
                     ui.separator();
                     ui.heading("Node Events");
 
-                    AnalysisPanel::event_ui(&self.node_events[id], ui, self.current_time.into());
+                    PlaybackPanel::event_ui(&self.node_events[id], ui, self.current_time.into());
                 }
                 InspectorTab::State => {
                     if let Some(ref mut live) = self.live_sim {

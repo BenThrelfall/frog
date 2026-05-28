@@ -1,9 +1,8 @@
-use std::mem::transmute;
+use egui::{CentralPanel, CollapsingHeader, Frame, Margin, SidePanel};
 
-use egui::{CentralPanel, CollapsingHeader, Color32, Frame, Margin, SidePanel};
-
-use egui_dock::{DockArea, DockState, SurfaceIndex, TabViewer};
+use egui_dock::{DockArea, DockState, TabViewer};
 use frogcore::{
+    node::NodeModel,
     scenario::Scenario,
     simulation::{MessageContent, data_structs::LogItem},
     units::Time,
@@ -13,14 +12,14 @@ use macroquad::prelude::*;
 use slotmap::{SlotMap, new_key_type};
 
 use crate::{
-    analysis_panel::AnalysisPanel,
+    playback_panel::PlaybackPanel,
     scenario_editor_panel::{ScenarioEditorPanel, default_scenario},
     scenario_generator_panel::ScenarioGeneratorPanel,
     style::dark_visuals,
 };
 
-pub mod analysis_panel;
 mod components;
+pub mod playback_panel;
 pub mod scenario_editor_panel;
 mod scenario_generator_panel;
 mod scene;
@@ -54,7 +53,6 @@ async fn main() {
     let app = MyApp {
         tabs: DockState::new(Vec::new()),
         scenarios: Vec::new(),
-        active_tab: 0,
         tab_display,
         renaming_scenario: None,
     };
@@ -70,7 +68,7 @@ pub struct Tab {
 
 #[derive(Debug)]
 enum TabBody {
-    Analysis(Box<AnalysisPanel>),
+    Analysis(Box<PlaybackPanel>),
     ScenarioEditor(Box<ScenarioEditorPanel>),
     ScenarioGenerator(Box<ScenarioGeneratorPanel>),
 }
@@ -78,7 +76,7 @@ enum TabBody {
 impl Tab {
     fn show(&mut self, id: TabKey, ui: &mut egui::Ui, store: &mut GuiStore) -> egui::Response {
         ui.push_id(id, |ui| match &mut self.body {
-            TabBody::Analysis(analysis_panel) => ui.add(analysis_panel.as_mut()),
+            TabBody::Analysis(analysis_panel) => analysis_panel.show(ui),
             TabBody::ScenarioEditor(scenario_editor_panel) => scenario_editor_panel.show(ui, store),
             TabBody::ScenarioGenerator(scenario_generator_panel) => {
                 scenario_generator_panel.show(ui, store)
@@ -97,7 +95,6 @@ struct LoadedScenario {
 struct MyApp {
     tabs: DockState<TabKey>,
     scenarios: Vec<LoadedScenario>,
-    active_tab: u64,
     renaming_scenario: Option<usize>,
     tab_display: TabDisplay,
 }
@@ -224,6 +221,14 @@ impl MyApp {
                         name,
                     })
                 }
+                GlobalAction::RunScenario(scenario, model) => {
+                    let playback = PlaybackPanel::from_scenario(scenario, model);
+                    let tab_id = self.tab_display.tabs.insert(Tab {
+                        name: "New Playback".to_string(),
+                        body: TabBody::Analysis(Box::new(playback)),
+                    });
+                    self.tabs.push_to_focused_leaf(tab_id);
+                }
             });
     }
 }
@@ -332,6 +337,7 @@ impl TabViewer for TabDisplay {
 #[derive(Debug, Clone)]
 pub enum GlobalAction {
     CreateScenario(String, Scenario),
+    RunScenario(Scenario, NodeModel),
 }
 
 const BACK_TIME: Time = Time::from_seconds(1.0);

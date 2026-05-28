@@ -1,6 +1,7 @@
 use egui::{Color32, ComboBox, DragValue, Frame, Modal, RichText, Widget};
 
 use frogcore::{
+    node::ModelSelection,
     node_location::{NodeLocation, Point, Points, Timepoint},
     scenario::{
         MovementIndicator, Scenario, ScenarioIdentity, ScenarioMessage, ScenarioNodeSettings,
@@ -11,7 +12,7 @@ use frogcore::{
 use macroquad::prelude::*;
 
 use super::Inspectable;
-use crate::{GuiStore, convert_rect, scene::SceneData};
+use crate::{GlobalAction, GuiStore, convert_rect, scene::SceneData};
 
 #[derive(Debug)]
 pub struct ScenarioEditorPanel {
@@ -24,14 +25,15 @@ pub struct ScenarioEditorPanel {
 }
 
 impl ScenarioEditorPanel {
-    pub fn big_red(&self) {
-       set_camera(&self.scene.camera); 
-       draw_rectangle(-1000., -1000., 10000., 10000., BLUE);
-    }
+    
     pub fn new(mut scenario: Scenario) -> ScenarioEditorPanel {
         let mut scene = SceneData::new();
         scenario.identity = ScenarioIdentity::Custom;
-        scene.zoom_to_fit(&scenario.map.display_locations(0.0 * SECONDS), screen_width(), screen_height());
+        scene.zoom_to_fit(
+            &scenario.map.display_locations(0.0 * SECONDS),
+            screen_width(),
+            screen_height(),
+        );
 
         ScenarioEditorPanel {
             scene,
@@ -67,6 +69,8 @@ pub fn default_scenario() -> Scenario {
 impl ScenarioEditorPanel {
     pub fn show(&mut self, ui: &mut egui::Ui, store: &mut GuiStore) -> egui::Response {
         let item_background = Color32::from_hex("#212121").unwrap();
+
+        let mut do_run_scenario = false;
 
         let Scenario {
             identity: _,
@@ -132,37 +136,39 @@ impl ScenarioEditorPanel {
             }
         }
 
-        egui::SidePanel::left(ui.id().with("Left panel")).show_inside(
-            ui,
-            |ui| {
-                node_setting_edit_panel(
-                    &mut self.inspect_target,
-                    settings,
-                    model,
-                    map,
-                    &mut self.delete_node_pending,
-                    ui,
-                );
-            },
-        );
+        egui::SidePanel::left(ui.id().with("Left panel")).show_inside(ui, |ui| {
+            node_setting_edit_panel(
+                &mut self.inspect_target,
+                settings,
+                model,
+                map,
+                &mut self.delete_node_pending,
+                ui,
+            );
+        });
 
-        egui::SidePanel::right(ui.id().with("Right panel")).show_inside(
-            ui,
-            |ui| {
-                egui::ScrollArea::vertical()
-                    .id_salt(format!("editor right scroll"))
-                    .show(ui, |ui| {
-                        message_editor_panel(
-                            item_background,
-                            messages,
-                            &mut self.message_sender_filter,
-                            &mut self.message_target_filter,
-                            map,
-                            ui,
-                        );
-                    });
-            },
-        );
+        egui::SidePanel::right(ui.id().with("Right panel")).show_inside(ui, |ui| {
+            egui::ScrollArea::vertical()
+                .id_salt(format!("editor right scroll"))
+                .show(ui, |ui| {
+                    message_editor_panel(
+                        item_background,
+                        messages,
+                        &mut self.message_sender_filter,
+                        &mut self.message_target_filter,
+                        map,
+                        ui,
+                    );
+                });
+        });
+
+        egui::TopBottomPanel::top(ui.id().with("Top panel")).show_inside(ui, |ui| {
+            ui.vertical_centered(|ui| {
+                if ui.button("Run").clicked() {
+                    do_run_scenario = true;
+                }
+            })
+        });
 
         let central_rect = egui::CentralPanel::default()
             .frame(Frame::NONE)
@@ -181,6 +187,13 @@ impl ScenarioEditorPanel {
             ui,
         );
 
+        if do_run_scenario {
+            store.queue_action(GlobalAction::RunScenario(
+                self.scenario.clone(),
+                ModelSelection::Meshtastic.into(),
+            ));
+        }
+
         ui.response()
     }
 }
@@ -197,7 +210,12 @@ fn editor_scene(
     }
 
     let Rect { x, y, w, h } = scene_rect;
-    scene.camera.viewport = Some((x as i32, (screen_height() - y - h) as i32, w as i32, h as i32));
+    scene.camera.viewport = Some((
+        x as i32,
+        (screen_height() - y - h) as i32,
+        w as i32,
+        h as i32,
+    ));
 
     scene.camera_control(scene_rect);
     scene.select_and_reposition_interaction(inspect_target, map, scene_rect);
@@ -207,7 +225,6 @@ fn editor_scene(
     scene.render_grid();
     scene.render_nodes(inspect_target, None, map, ui, scene_rect);
     scene.render_scale_indicator(ui, scene_rect);
-
 }
 
 fn message_editor_panel(
@@ -507,11 +524,7 @@ fn node_setting_edit_panel(
     }
 }
 
-fn inspect_node(
-    current_node: &mut ScenarioNodeSettings,
-    point: &mut Point,
-    ui: &mut egui::Ui,
-) {
+fn inspect_node(current_node: &mut ScenarioNodeSettings, point: &mut Point, ui: &mut egui::Ui) {
     ui.add_space(5.0);
     ui.horizontal(|ui| {
         ui.label("Position");
