@@ -330,7 +330,7 @@ impl TabViewer for TabDisplay {
     }
 
     fn scroll_bars(&self, _tab: &Self::Tab) -> [bool; 2] {
-        [true, true]
+        [false, false]
     }
 }
 

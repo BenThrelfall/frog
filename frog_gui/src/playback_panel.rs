@@ -148,22 +148,22 @@ impl PlaybackPanel {
         let item_background = Color32::from_hex("#212121").unwrap();
         let main_red = Color32::from_hex("#9b0d0d").unwrap();
 
-        egui::TopBottomPanel::top("timeline").show_inside(ui, |ui| {
+        egui::TopBottomPanel::top(ui.id().with("timeline")).show_inside(ui, |ui| {
             self.analysis_timeline_panel(item_background, main_red, ui);
         });
 
-        egui::SidePanel::left("inspector")
+        egui::SidePanel::left(ui.id().with("inspector"))
             .max_width(500.0)
             .min_width(350.0)
             .show_inside(ui, |ui| {
                 self.analysis_inspector_panel(&node_locations, item_background, ui)
             });
 
-        egui::SidePanel::right("right_panel")
+        egui::SidePanel::right(ui.id().with("right_panel"))
             .min_width(285.0)
             .show_inside(ui, |ui| self.analysis_events_panel(item_background, ui));
 
-        egui::TopBottomPanel::bottom("transmission_timeline")
+        egui::TopBottomPanel::bottom(ui.id().with("transmission_timeline"))
             .min_height(150.0)
             .show_inside(ui, |ui| {
                 self.analysis_transmission_timeline(main_red, ui);
@@ -652,7 +652,6 @@ impl PlaybackPanel {
 
         let mut minutes = (self.current_time / 60.0).floor();
         let mut seconds = self.current_time % 60.0;
-        ui.spacing_mut().slider_width = 900.0;
 
         ui.style_mut().visuals.widgets.inactive = WidgetVisuals {
             bg_fill: item_background,
@@ -662,6 +661,7 @@ impl PlaybackPanel {
             fg_stroke: Stroke::new(1.0, main_red),
             expansion: 0.0,
         };
+        ui.spacing_mut().slider_width = ui.available_width() - 300.;
 
         let mins_slider = egui::Slider::new(&mut minutes, 0.0..=(self.end_time / 60.0).floor())
             .handle_shape(egui::style::HandleShape::Rect { aspect_ratio: 0.4 })
