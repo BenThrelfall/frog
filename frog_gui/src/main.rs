@@ -46,6 +46,8 @@ async fn main() {
         global_action_queue: Vec::new(),
         next_id: 0,
         debugger: Debugger::new(),
+        scenarios: SlotMap::with_key(),
+        renaming_scenario: None,
     };
 
     let tab_display = TabDisplay {
@@ -53,19 +55,26 @@ async fn main() {
         tabs: SlotMap::with_key(),
     };
 
-    let app = MyApp {
+    let mut app = MyApp {
         tabs: DockState::new(Vec::new()),
-        scenarios: Vec::new(),
         tab_display,
-        renaming_scenario: None,
     };
+
+    {
+        let tab_id = app.tab_display.tabs.insert(Tab {
+            body: TabBody::ScenarioEditor(Box::new(ScenarioEditorPanel::new(
+                default_scenario(),
+                None,
+            ))),
+        });
+        app.tabs.push_to_focused_leaf(tab_id);
+    }
 
     app.run().await;
 }
 
 #[derive(Debug)]
 pub struct Tab {
-    name: String,
     body: TabBody,
 }
 
@@ -89,7 +98,8 @@ impl Tab {
     }
 }
 
-struct LoadedScenario {
+#[derive(Debug)]
+pub struct LoadedScenario {
     open_in_tab: Option<TabKey>,
     scenario: Scenario,
     name: String,
@@ -97,8 +107,6 @@ struct LoadedScenario {
 
 struct MyApp {
     tabs: DockState<TabKey>,
-    scenarios: Vec<LoadedScenario>,
-    renaming_scenario: Option<usize>,
     tab_display: TabDisplay,
 }
 
@@ -134,17 +142,12 @@ impl MyApp {
                         if ui.button("Empty Custom Scenario").clicked() {
                             self.tab_display
                                 .store
-                                .queue_action(GlobalAction::CreateScenario(
-                                    "New Scenario".to_string(),
-                                    default_scenario(),
-                                ));
-
+                                .insert_as_save("New Scenario".to_string(), default_scenario());
                             ui.close_menu();
                         }
                         if ui.button("Custom Scenario from Generator").clicked() {
                             let generator_panel = ScenarioGeneratorPanel::new();
                             let tab_id = self.tab_display.tabs.insert(Tab {
-                                name: "Generate Scenario".to_string(),
                                 body: TabBody::ScenarioGenerator(Box::new(generator_panel)),
                             });
                             self.tabs.push_to_focused_leaf(tab_id);
@@ -155,55 +158,64 @@ impl MyApp {
 
                 ui.add_space(5.);
                 ui.label("Scenarios");
-                self.scenarios.iter_mut().enumerate().for_each(|(n, scen)| {
-                    if self.renaming_scenario.is_some_and(|x| x == n) {
-                        let name_input = ui.text_edit_singleline(&mut scen.name);
+                self.tab_display
+                    .store
+                    .scenarios
+                    .iter_mut()
+                    .for_each(|(key, scen)| {
+                        if self
+                            .tab_display
+                            .store
+                            .renaming_scenario
+                            .is_some_and(|x| x == key)
+                        {
+                            let name_input = ui.text_edit_singleline(&mut scen.name);
 
-                        if name_input.lost_focus() {
-                            self.renaming_scenario = None;
-                        };
+                            if name_input.lost_focus() {
+                                self.tab_display.store.renaming_scenario = None;
+                            };
 
-                        if name_input.has_focus() == false {
-                            name_input.request_focus();
+                            if name_input.has_focus() == false {
+                                name_input.request_focus();
+                            }
+
+                            return;
                         }
 
-                        return;
-                    }
+                        let scen_button = ui.button(&scen.name);
 
-                    let scen_button = ui.button(&scen.name);
+                        scen_button.context_menu(|ui| {
+                            if ui.button("Create copy").clicked() {
+                                ui.close_menu();
+                            }
 
-                    scen_button.context_menu(|ui| {
-                        if ui.button("Create copy").clicked() {
-                            ui.close_menu();
-                        }
+                            if ui.button("Rename").clicked() {
+                                self.tab_display.store.renaming_scenario = Some(key);
+                                ui.close_menu();
+                            }
+                        });
 
-                        if ui.button("Rename").clicked() {
-                            self.renaming_scenario = Some(n);
-                            ui.close_menu();
+                        if scen_button.clicked() {
+                            match scen
+                                .open_in_tab
+                                .and_then(|tab_key| self.tabs.find_tab(&tab_key))
+                            {
+                                Some(indices) => self.tabs.set_active_tab(indices),
+                                None => {
+                                    let tab_id = self.tab_display.tabs.insert(Tab {
+                                        body: TabBody::ScenarioEditor(Box::new(
+                                            ScenarioEditorPanel::new(
+                                                scen.scenario.clone(),
+                                                Some(key),
+                                            ),
+                                        )),
+                                    });
+                                    self.tabs.push_to_focused_leaf(tab_id);
+                                    scen.open_in_tab = Some(tab_id);
+                                }
+                            }
                         }
                     });
-
-                    if scen_button.clicked() {
-                        match scen.open_in_tab {
-                            Some(tab_id) => {
-                                match self.tabs.find_tab(&tab_id) {
-                                    Some(indices) => self.tabs.set_active_tab(indices),
-                                    None => self.tabs.push_to_focused_leaf(tab_id),
-                                };
-                            }
-                            None => {
-                                let tab_id = self.tab_display.tabs.insert(Tab {
-                                    name: scen.name.clone(),
-                                    body: TabBody::ScenarioEditor(Box::new(
-                                        ScenarioEditorPanel::new(scen.scenario.clone()),
-                                    )),
-                                });
-                                self.tabs.push_to_focused_leaf(tab_id);
-                                scen.open_in_tab = Some(tab_id);
-                            }
-                        }
-                    }
-                });
             });
 
         CentralPanel::default().frame(Frame::NONE).show(ctx, |ui| {
@@ -221,29 +233,15 @@ impl MyApp {
             .global_action_queue
             .drain(..)
             .for_each(|action| match action {
-                GlobalAction::CreateScenario(name, scenario) => {
-                    let mut use_name = name.clone();
-                    let mut counter = 0;
-
-                    while self.scenarios.iter().find(|x| x.name == use_name).is_some() {
-                        counter += 1;
-                        use_name = format!("{name} {counter}");
-                    }
-
-                    self.scenarios.push(LoadedScenario {
-                        open_in_tab: None,
-                        scenario,
-                        name: use_name,
-                    });
-                    self.renaming_scenario = Some(self.scenarios.len() - 1);
-                }
-                GlobalAction::RunScenario(scenario, model) => {
-                    let playback = PlaybackPanel::from_scenario(scenario, model);
+                GlobalAction::RunScenario(linked_save, scenario, model) => {
+                    let playback = PlaybackPanel::from_scenario(scenario, model, linked_save);
                     let tab_id = self.tab_display.tabs.insert(Tab {
-                        name: "New Playback".to_string(),
                         body: TabBody::Analysis(Box::new(playback)),
                     });
                     self.tabs.push_to_focused_leaf(tab_id);
+                }
+                GlobalAction::OnCloseTab(tab_key) => {
+                    self.tab_display.tabs.remove(tab_key);
                 }
             });
     }
@@ -251,6 +249,7 @@ impl MyApp {
 
 new_key_type! {
     pub struct TabKey;
+    pub struct ScenarioKey;
 }
 
 #[derive(Debug)]
@@ -262,9 +261,11 @@ pub struct TabDisplay {
 #[derive(Debug)]
 pub struct GuiStore {
     pub node_spacing: f32,
+    pub scenarios: SlotMap<ScenarioKey, LoadedScenario>,
     pub next_id: u64,
     pub global_action_queue: Vec<GlobalAction>,
     pub debugger: Debugger,
+    pub renaming_scenario: Option<ScenarioKey>,
 }
 
 impl GuiStore {
@@ -277,13 +278,56 @@ impl GuiStore {
     pub fn queue_action(&mut self, action: GlobalAction) {
         self.global_action_queue.push(action);
     }
+
+    pub fn insert_as_save(&mut self, name: String, scenario: Scenario) -> ScenarioKey {
+        let mut use_name = name.clone();
+        let mut counter = 0;
+
+        while self
+            .scenarios
+            .iter()
+            .find(|(_, x)| x.name == use_name)
+            .is_some()
+        {
+            counter += 1;
+            use_name = format!("{name} {counter}");
+        }
+
+        let key = self.scenarios.insert(LoadedScenario {
+            open_in_tab: None,
+            scenario,
+            name: use_name,
+        });
+        self.renaming_scenario = Some(key);
+
+        key
+    }
 }
 
 impl TabViewer for TabDisplay {
     type Tab = self::TabKey;
 
     fn title(&mut self, tab: &mut Self::Tab) -> egui::WidgetText {
-        self.tabs.get(*tab).unwrap().name.as_str().into()
+        let tab = self.tabs.get(*tab).unwrap();
+        match &tab.body {
+            TabBody::Analysis(panel) => panel
+                .linked_save
+                .and_then(|key| self.store.scenarios.get(key))
+                .map_or("Unnamed Playback".into(), |x| {
+                    format!("{} Playback", x.name).as_str().into()
+                }),
+            TabBody::ScenarioEditor(scenario_editor_panel) => scenario_editor_panel
+                .saved_data
+                .and_then(|key| self.store.scenarios.get(key))
+                .map_or("Unnamed Scenario".into(), |x| {
+                    if scenario_editor_panel.dirty {
+                        format!("{}*", x.name).into()
+                    } else {
+                        x.name.as_str().into()
+                    }
+                }),
+            TabBody::ScenarioGenerator(_) => "Generator".into(),
+        }
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, tab: &mut Self::Tab) {
@@ -295,11 +339,36 @@ impl TabViewer for TabDisplay {
 
     fn context_menu(
         &mut self,
-        _ui: &mut egui::Ui,
-        _tab: &mut Self::Tab,
+        ui: &mut egui::Ui,
+        tab: &mut Self::Tab,
         _surface: egui_dock::SurfaceIndex,
         _node: egui_dock::NodeIndex,
     ) {
+        let tab = self.tabs.get_mut(*tab).unwrap();
+
+        match &mut tab.body {
+            TabBody::ScenarioEditor(panel) => {
+                if ui.button("Save").clicked() {
+                    let Some(save) = panel
+                        .saved_data
+                        .and_then(|x| self.store.scenarios.get_mut(x))
+                    else {
+                        let new_key = self.store
+                            .insert_as_save("Saved Scenario".to_string(), panel.scenario.clone());
+
+                        panel.saved_data = Some(new_key);
+                        ui.close_menu();
+                        return;
+                    };
+
+                    save.scenario = panel.scenario.clone();
+                    panel.dirty = false;
+
+                    ui.close_menu();
+                }
+            }
+            _ => (),
+        }
     }
 
     fn id(&mut self, tab: &mut Self::Tab) -> egui::Id {
@@ -312,7 +381,8 @@ impl TabViewer for TabDisplay {
         true
     }
 
-    fn on_close(&mut self, _tab: &mut Self::Tab) -> bool {
+    fn on_close(&mut self, tab: &mut Self::Tab) -> bool {
+        self.store.queue_action(GlobalAction::OnCloseTab(*tab));
         true
     }
 
@@ -353,8 +423,9 @@ impl TabViewer for TabDisplay {
 
 #[derive(Debug, Clone)]
 pub enum GlobalAction {
-    CreateScenario(String, Scenario),
-    RunScenario(Scenario, NodeModel),
+    //CreateScenario(String, Scenario),
+    RunScenario(Option<ScenarioKey>, Scenario, NodeModel),
+    OnCloseTab(TabKey),
 }
 
 const BACK_TIME: Time = Time::from_seconds(1.0);
