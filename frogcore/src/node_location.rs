@@ -9,7 +9,7 @@ use crate::units::{Length, Time, METRES};
 macro_rules! node_location {
     ($($variant:ident),+) => {
 
-        #[derive(Debug, Clone, Serialize, Deserialize)]
+        #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
         pub enum NodeLocation {
             $(
                 $variant($variant),
@@ -61,7 +61,7 @@ macro_rules! node_location {
     };
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Copy)]
 pub struct Edge {
     pub to: usize,
 
@@ -71,7 +71,7 @@ pub struct Edge {
 
 /// Point having Length is currently not correctly integrated.
 /// Keep that in mind.
-#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Copy)]
 pub struct Point {
     pub x: Length,
     pub y: Length,
@@ -170,7 +170,7 @@ trait ImplNodeLocation {
 }
 
 /// Graph
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Graph {
     data: Vec<Vec<Edge>>,
     display: RefCell<Option<Vec<Point>>>,
@@ -290,7 +290,7 @@ impl ImplNodeLocation for Graph {
 }
 
 /// Points
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Points {
     pub data: Vec<Timepoint>,
 
@@ -403,7 +403,7 @@ impl ImplNodeLocation for Points {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Timepoint {
     pub time: Time,
     /// vec index is node id

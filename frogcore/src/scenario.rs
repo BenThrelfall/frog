@@ -31,7 +31,7 @@ impl ScenarioIdentity {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Scenario {
     // Regeneration
     pub identity: ScenarioIdentity,
@@ -50,7 +50,7 @@ impl Scenario {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ScenarioMessage {
     /// who the message will be sent by
     pub sender: usize,
@@ -120,7 +120,7 @@ impl MovementIndicator {
     ];
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ScenarioNodeSettings {
     /// Number of bits per transmission symbol. Known as spreading factor.
     pub sf: i32,
