@@ -1,4 +1,4 @@
-use egui::{CentralPanel, CollapsingHeader, Frame, Label, Margin, SidePanel};
+use egui::{CentralPanel, Frame, Margin, SidePanel};
 
 use egui_dock::{DockArea, DockState, TabViewer};
 use frogcore::{
@@ -12,7 +12,6 @@ use macroquad::prelude::*;
 use slotmap::{SlotMap, new_key_type};
 
 use crate::{
-    TabBody::ScenarioGenerator,
     debug::Debugger,
     playback_panel::PlaybackPanel,
     scenario_editor_panel::{ScenarioEditorPanel, default_scenario},

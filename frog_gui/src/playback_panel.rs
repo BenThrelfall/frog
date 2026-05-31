@@ -143,7 +143,7 @@ impl PlaybackPanel {
 }
 
 impl PlaybackPanel {
-    pub fn show(&mut self, ui: &mut egui::Ui, store: &mut GuiStore) -> egui::Response {
+    pub fn show(&mut self, ui: &mut egui::Ui, _store: &mut GuiStore) -> egui::Response {
         let node_locations = self
             .node_locations
             .display_locations(Time::from_seconds(self.current_time));

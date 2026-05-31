@@ -1,4 +1,4 @@
-use egui::{Color32, ComboBox, DragValue, Frame, Key::O, Modal, RichText, Widget};
+use egui::{Color32, ComboBox, DragValue, Frame, Modal, RichText};
 
 use frogcore::{
     node::ModelSelection,
