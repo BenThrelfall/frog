@@ -21,7 +21,10 @@ use frogcore::{
     units::{METRES, Time},
 };
 
-use crate::scene::{SceneData, point_to_vec};
+use crate::{
+    GuiStore,
+    scene::{SceneData, point_to_vec},
+};
 use crate::{Inspectable, convert_rect, get_event_window, short_content};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -140,7 +143,7 @@ impl PlaybackPanel {
 }
 
 impl PlaybackPanel {
-    pub fn show(&mut self, ui: &mut egui::Ui) -> egui::Response {
+    pub fn show(&mut self, ui: &mut egui::Ui, store: &mut GuiStore) -> egui::Response {
         let node_locations = self
             .node_locations
             .display_locations(Time::from_seconds(self.current_time));

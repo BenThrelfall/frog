@@ -1,4 +1,4 @@
-use egui::{Color32, ComboBox, DragValue, Frame, Modal, RichText, Widget};
+use egui::{Color32, ComboBox, DragValue, Frame, Key::O, Modal, RichText, Widget};
 
 use frogcore::{
     node::ModelSelection,
@@ -25,7 +25,6 @@ pub struct ScenarioEditorPanel {
 }
 
 impl ScenarioEditorPanel {
-    
     pub fn new(mut scenario: Scenario) -> ScenarioEditorPanel {
         let mut scene = SceneData::new();
         scenario.identity = ScenarioIdentity::Custom;
@@ -68,6 +67,7 @@ pub fn default_scenario() -> Scenario {
 
 impl ScenarioEditorPanel {
     pub fn show(&mut self, ui: &mut egui::Ui, store: &mut GuiStore) -> egui::Response {
+        store.debugger.draw_rect(convert_rect(ui.max_rect()), PINK);
         let item_background = Color32::from_hex("#212121").unwrap();
 
         let mut do_run_scenario = false;
@@ -137,19 +137,23 @@ impl ScenarioEditorPanel {
         }
 
         egui::SidePanel::left(ui.id().with("Left panel")).show_inside(ui, |ui| {
-            node_setting_edit_panel(
-                &mut self.inspect_target,
-                settings,
-                model,
-                map,
-                &mut self.delete_node_pending,
-                ui,
-            );
+            egui::ScrollArea::vertical()
+                .id_salt("editor left scroll")
+                .show(ui, |ui| {
+                    node_setting_edit_panel(
+                        &mut self.inspect_target,
+                        settings,
+                        model,
+                        map,
+                        &mut self.delete_node_pending,
+                        ui,
+                    );
+                });
         });
 
         egui::SidePanel::right(ui.id().with("Right panel")).show_inside(ui, |ui| {
             egui::ScrollArea::vertical()
-                .id_salt(format!("editor right scroll"))
+                .id_salt("editor right scroll")
                 .show(ui, |ui| {
                     message_editor_panel(
                         item_background,
@@ -170,15 +174,22 @@ impl ScenarioEditorPanel {
             })
         });
 
+        egui::TopBottomPanel::bottom(ui.id().with("Bottom panel"))
+            .min_height(30.)
+            .show_inside(ui, |ui| ui.label("Editor bottom panel"));
+
         let central_rect = egui::CentralPanel::default()
             .frame(Frame::NONE)
             .show_inside(ui, |ui| {
+                store.debugger.draw_rect(convert_rect(ui.max_rect()), BLUE);
+
                 self.scene.scene_egui(ui, true);
                 ui.response()
             })
             .inner
             .rect;
 
+        store.debugger.draw_rect(convert_rect(central_rect), GREEN);
         editor_scene(
             &mut self.inspect_target,
             &mut self.scene,

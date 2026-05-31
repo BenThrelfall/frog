@@ -12,6 +12,7 @@ use macroquad::prelude::*;
 use slotmap::{SlotMap, new_key_type};
 
 use crate::{
+    debug::Debugger,
     playback_panel::PlaybackPanel,
     scenario_editor_panel::{ScenarioEditorPanel, default_scenario},
     scenario_generator_panel::ScenarioGeneratorPanel,
@@ -19,6 +20,7 @@ use crate::{
 };
 
 mod components;
+mod debug;
 pub mod playback_panel;
 pub mod scenario_editor_panel;
 mod scenario_generator_panel;
@@ -43,6 +45,7 @@ async fn main() {
         node_spacing: 1.0,
         global_action_queue: Vec::new(),
         next_id: 0,
+        debugger: Debugger::new(),
     };
 
     let tab_display = TabDisplay {
@@ -76,7 +79,7 @@ enum TabBody {
 impl Tab {
     fn show(&mut self, id: TabKey, ui: &mut egui::Ui, store: &mut GuiStore) -> egui::Response {
         ui.push_id(id, |ui| match &mut self.body {
-            TabBody::Analysis(analysis_panel) => analysis_panel.show(ui),
+            TabBody::Analysis(analysis_panel) => analysis_panel.show(ui, store),
             TabBody::ScenarioEditor(scenario_editor_panel) => scenario_editor_panel.show(ui, store),
             TabBody::ScenarioGenerator(scenario_generator_panel) => {
                 scenario_generator_panel.show(ui, store)
@@ -102,11 +105,13 @@ struct MyApp {
 impl MyApp {
     async fn run(mut self) {
         loop {
+            self.tab_display.store.debugger.reset();
             clear_background(Color::from_hex(0x404040));
             self.update();
 
             set_default_camera();
             egui_macroquad::draw();
+            self.tab_display.store.debugger.render_debug();
 
             next_frame().await;
         }
@@ -248,6 +253,7 @@ pub struct GuiStore {
     pub node_spacing: f32,
     pub next_id: u64,
     pub global_action_queue: Vec<GlobalAction>,
+    pub debugger: Debugger,
 }
 
 impl GuiStore {
