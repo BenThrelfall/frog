@@ -1,4 +1,4 @@
-use egui::{CentralPanel, CollapsingHeader, Frame, Margin, SidePanel};
+use egui::{CentralPanel, CollapsingHeader, Frame, Label, Margin, SidePanel};
 
 use egui_dock::{DockArea, DockState, TabViewer};
 use frogcore::{
@@ -12,6 +12,7 @@ use macroquad::prelude::*;
 use slotmap::{SlotMap, new_key_type};
 
 use crate::{
+    TabBody::ScenarioGenerator,
     debug::Debugger,
     playback_panel::PlaybackPanel,
     scenario_editor_panel::{ScenarioEditorPanel, default_scenario},
@@ -127,81 +128,83 @@ impl MyApp {
         });
 
         SidePanel::left("mode_selector")
-            .default_width(80.0)
+            .default_width(150.0)
             .show(ctx, |ui| {
                 ui.vertical_centered(|ui| {
                     ui.menu_button("Create New", |ui| {
                         if ui.button("Empty Custom Scenario").clicked() {
-                            self.scenarios.push(LoadedScenario {
-                                open_in_tab: None,
-                                scenario: default_scenario(),
-                                name: "New Scenario".to_string(),
-                            });
-                            self.renaming_scenario = Some(self.scenarios.len() - 1);
+                            self.tab_display
+                                .store
+                                .queue_action(GlobalAction::CreateScenario(
+                                    "New Scenario".to_string(),
+                                    default_scenario(),
+                                ));
+
                             ui.close_menu();
                         }
                         if ui.button("Custom Scenario from Generator").clicked() {
-                            ui.close_menu();
-                        }
-                        if ui.button("Study").clicked() {
+                            let generator_panel = ScenarioGeneratorPanel::new();
+                            let tab_id = self.tab_display.tabs.insert(Tab {
+                                name: "Generate Scenario".to_string(),
+                                body: TabBody::ScenarioGenerator(Box::new(generator_panel)),
+                            });
+                            self.tabs.push_to_focused_leaf(tab_id);
                             ui.close_menu();
                         }
                     });
                 });
 
-                CollapsingHeader::new("Custom Scenarios")
-                    .default_open(true)
-                    .show(ui, |ui| {
-                        self.scenarios.iter_mut().enumerate().for_each(|(n, scen)| {
-                            if self.renaming_scenario.is_some_and(|x| x == n) {
-                                let name_input = ui.text_edit_singleline(&mut scen.name);
+                ui.add_space(5.);
+                ui.label("Scenarios");
+                self.scenarios.iter_mut().enumerate().for_each(|(n, scen)| {
+                    if self.renaming_scenario.is_some_and(|x| x == n) {
+                        let name_input = ui.text_edit_singleline(&mut scen.name);
 
-                                if name_input.lost_focus() {
-                                    self.renaming_scenario = None;
-                                };
+                        if name_input.lost_focus() {
+                            self.renaming_scenario = None;
+                        };
 
-                                if name_input.has_focus() == false {
-                                    name_input.request_focus();
-                                }
+                        if name_input.has_focus() == false {
+                            name_input.request_focus();
+                        }
 
-                                return;
-                            }
+                        return;
+                    }
 
-                            let scen_button = ui.button(&scen.name);
+                    let scen_button = ui.button(&scen.name);
 
-                            scen_button.context_menu(|ui| {
-                                if ui.button("Create copy").clicked() {
-                                    ui.close_menu();
-                                }
+                    scen_button.context_menu(|ui| {
+                        if ui.button("Create copy").clicked() {
+                            ui.close_menu();
+                        }
 
-                                if ui.button("Rename").clicked() {
-                                    self.renaming_scenario = Some(n);
-                                    ui.close_menu();
-                                }
-                            });
-
-                            if scen_button.clicked() {
-                                match scen.open_in_tab {
-                                    Some(tab_id) => {
-                                        match self.tabs.find_tab(&tab_id) {
-                                            Some(indices) => self.tabs.set_active_tab(indices),
-                                            None => self.tabs.push_to_focused_leaf(tab_id),
-                                        };
-                                    }
-                                    None => {
-                                        let tab_id = self.tab_display.tabs.insert(Tab {
-                                            name: scen.name.clone(),
-                                            body: TabBody::ScenarioEditor(Box::new(
-                                                ScenarioEditorPanel::new(scen.scenario.clone()),
-                                            )),
-                                        });
-                                        self.tabs.push_to_focused_leaf(tab_id);
-                                        scen.open_in_tab = Some(tab_id);
-                                    }
-                                }
-                            }
-                        });
+                        if ui.button("Rename").clicked() {
+                            self.renaming_scenario = Some(n);
+                            ui.close_menu();
+                        }
                     });
+
+                    if scen_button.clicked() {
+                        match scen.open_in_tab {
+                            Some(tab_id) => {
+                                match self.tabs.find_tab(&tab_id) {
+                                    Some(indices) => self.tabs.set_active_tab(indices),
+                                    None => self.tabs.push_to_focused_leaf(tab_id),
+                                };
+                            }
+                            None => {
+                                let tab_id = self.tab_display.tabs.insert(Tab {
+                                    name: scen.name.clone(),
+                                    body: TabBody::ScenarioEditor(Box::new(
+                                        ScenarioEditorPanel::new(scen.scenario.clone()),
+                                    )),
+                                });
+                                self.tabs.push_to_focused_leaf(tab_id);
+                                scen.open_in_tab = Some(tab_id);
+                            }
+                        }
+                    }
+                });
             });
 
         CentralPanel::default().frame(Frame::NONE).show(ctx, |ui| {
@@ -220,11 +223,20 @@ impl MyApp {
             .drain(..)
             .for_each(|action| match action {
                 GlobalAction::CreateScenario(name, scenario) => {
+                    let mut use_name = name.clone();
+                    let mut counter = 0;
+
+                    while self.scenarios.iter().find(|x| x.name == use_name).is_some() {
+                        counter += 1;
+                        use_name = format!("{name} {counter}");
+                    }
+
                     self.scenarios.push(LoadedScenario {
                         open_in_tab: None,
                         scenario,
-                        name,
-                    })
+                        name: use_name,
+                    });
+                    self.renaming_scenario = Some(self.scenarios.len() - 1);
                 }
                 GlobalAction::RunScenario(scenario, model) => {
                     let playback = PlaybackPanel::from_scenario(scenario, model);

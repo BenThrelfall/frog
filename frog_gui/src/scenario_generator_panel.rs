@@ -107,7 +107,7 @@ impl ScenarioGeneratorPanel {
 
                 if col1.button("Generate").clicked() {
                     store.queue_action(GlobalAction::CreateScenario(
-                        "New Scenario".to_string(),
+                        "Random Placement".to_string(),
                         ScenarioIdentity::Generated {
                             generator: ScenarioGenerator::RandomSquare {
                                 node_count: self.rp_node_count,
@@ -138,7 +138,7 @@ impl ScenarioGeneratorPanel {
                 col2.unit_edit("Area Side Length", &mut self.paths_side_len, "m");
 
                 if col2.button("Generate").clicked() {
-                    store.queue_action(GlobalAction::CreateScenario("New Scenario".to_string(), 
+                    store.queue_action(GlobalAction::CreateScenario("Pathways".to_string(), 
                         ScenarioIdentity::Generated {
                             generator: ScenarioGenerator::PathwaysOne {
                                 passive_key_points: 8,
@@ -173,7 +173,7 @@ impl ScenarioGeneratorPanel {
                 col3.numeric_edit("Minimum Degree: ", &mut self.graph_min_degree);
 
                 if col3.button("Generate").clicked() {
-                    store.queue_action(GlobalAction::CreateScenario("New Scenario".to_string(),
+                    store.queue_action(GlobalAction::CreateScenario("Graph".to_string(),
                         ScenarioIdentity::Generated {
                             generator: ScenarioGenerator::PsudoSpatialGraph {
                                 nodes: self.graph_node_count,

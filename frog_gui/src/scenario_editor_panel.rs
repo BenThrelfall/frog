@@ -67,7 +67,6 @@ pub fn default_scenario() -> Scenario {
 
 impl ScenarioEditorPanel {
     pub fn show(&mut self, ui: &mut egui::Ui, store: &mut GuiStore) -> egui::Response {
-        store.debugger.draw_rect(convert_rect(ui.max_rect()), PINK);
         let item_background = Color32::from_hex("#212121").unwrap();
 
         let mut do_run_scenario = false;
@@ -181,15 +180,12 @@ impl ScenarioEditorPanel {
         let central_rect = egui::CentralPanel::default()
             .frame(Frame::NONE)
             .show_inside(ui, |ui| {
-                store.debugger.draw_rect(convert_rect(ui.max_rect()), BLUE);
-
                 self.scene.scene_egui(ui, true);
                 ui.response()
             })
             .inner
             .rect;
 
-        store.debugger.draw_rect(convert_rect(central_rect), GREEN);
         editor_scene(
             &mut self.inspect_target,
             &mut self.scene,
