@@ -12,11 +12,12 @@ use frogcore::{
 use macroquad::prelude::*;
 
 use super::Inspectable;
-use crate::{GlobalAction, GuiStore, convert_rect, scene::SceneData};
+use crate::{GlobalAction, GuiStore, ScenarioKey, convert_rect, scene::SceneData};
 
 #[derive(Debug)]
 pub struct ScenarioEditorPanel {
     scene: SceneData,
+    pub saved_data: Option<ScenarioKey>,
     pub scenario: Scenario,
     inspect_target: Inspectable,
     delete_node_pending: Option<usize>,
@@ -25,7 +26,7 @@ pub struct ScenarioEditorPanel {
 }
 
 impl ScenarioEditorPanel {
-    pub fn new(mut scenario: Scenario) -> ScenarioEditorPanel {
+    pub fn new(mut scenario: Scenario, saved_data: Option<ScenarioKey>) -> ScenarioEditorPanel {
         let mut scene = SceneData::new();
         scenario.identity = ScenarioIdentity::Custom;
         scene.zoom_to_fit(
@@ -41,12 +42,13 @@ impl ScenarioEditorPanel {
             delete_node_pending: None,
             message_sender_filter: None,
             message_target_filter: None,
+            saved_data,
         }
     }
 }
 
 pub fn new_scenario_and_panel() -> ScenarioEditorPanel {
-    ScenarioEditorPanel::new(default_scenario())
+    ScenarioEditorPanel::new(default_scenario(), None)
 }
 
 pub fn default_scenario() -> Scenario {
@@ -196,6 +198,7 @@ impl ScenarioEditorPanel {
 
         if do_run_scenario {
             store.queue_action(GlobalAction::RunScenario(
+                self.saved_data,
                 self.scenario.clone(),
                 ModelSelection::Meshtastic.into(),
             ));

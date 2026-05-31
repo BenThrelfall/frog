@@ -22,8 +22,7 @@ use frogcore::{
 };
 
 use crate::{
-    GuiStore,
-    scene::{SceneData, point_to_vec},
+    GuiStore, ScenarioKey, scene::{SceneData, point_to_vec}
 };
 use crate::{Inspectable, convert_rect, get_event_window, short_content};
 
@@ -35,6 +34,8 @@ enum InspectorTab {
 
 #[derive(Debug)]
 pub struct PlaybackPanel {
+    pub linked_save: Option<ScenarioKey>,
+
     scene: SceneData,
     node_locations: NodeLocation,
     node_settings: Vec<ScenarioNodeSettings>,
@@ -61,7 +62,7 @@ pub struct PlaybackPanel {
 }
 
 impl PlaybackPanel {
-    pub fn new(scenario: Scenario, results: SimOutput) -> PlaybackPanel {
+    pub fn new(scenario: Scenario, results: SimOutput, linked_save: Option<ScenarioKey>) -> PlaybackPanel {
         let CompleteAnalysis {
             node_settings,
             node_events,
@@ -91,6 +92,7 @@ impl PlaybackPanel {
         );
 
         PlaybackPanel {
+            linked_save,
             node_locations,
             node_settings,
             node_events,
@@ -117,11 +119,11 @@ impl PlaybackPanel {
         }
     }
 
-    pub fn from_scenario(scenario: Scenario, model: NodeModel) -> PlaybackPanel {
+    pub fn from_scenario(scenario: Scenario, model: NodeModel, linked_save: Option<ScenarioKey>) -> PlaybackPanel {
         let live = LiveSimulation::new(12345, scenario.clone(), model.clone(), true);
         let sim_output = run_simulation(12345, scenario.clone(), model, true);
 
-        let mut out = PlaybackPanel::new(scenario, sim_output);
+        let mut out = PlaybackPanel::new(scenario, sim_output, linked_save);
 
         out.live_sim = Some(live);
 
