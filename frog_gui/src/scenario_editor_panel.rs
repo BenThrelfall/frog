@@ -18,6 +18,7 @@ use crate::{GlobalAction, GuiStore, ScenarioKey, convert_rect, scene::SceneData}
 pub struct ScenarioEditorPanel {
     scene: SceneData,
     pub saved_data: Option<ScenarioKey>,
+    pub dirty: bool,
     pub scenario: Scenario,
     inspect_target: Inspectable,
     delete_node_pending: Option<usize>,
@@ -43,6 +44,7 @@ impl ScenarioEditorPanel {
             message_sender_filter: None,
             message_target_filter: None,
             saved_data,
+            dirty: false,
         }
     }
 }
@@ -202,6 +204,13 @@ impl ScenarioEditorPanel {
                 self.scenario.clone(),
                 ModelSelection::Meshtastic.into(),
             ));
+        }
+
+        if let Some(key) = self.saved_data {
+            let data = store.scenarios.get(key).unwrap();
+            if data.scenario != self.scenario {
+                self.dirty = true;
+            }
         }
 
         ui.response()
