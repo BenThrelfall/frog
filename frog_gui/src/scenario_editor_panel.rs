@@ -207,8 +207,8 @@ impl ScenarioEditorPanel {
         }
 
         if let Some(key) = self.saved_data {
-            let data = store.scenarios.get(key).unwrap();
-            if data.scenario != self.scenario {
+            let data = store.files.get_scenario(key).unwrap();
+            if *data != self.scenario {
                 self.dirty = true;
             }
         }
