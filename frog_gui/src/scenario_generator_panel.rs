@@ -106,7 +106,7 @@ impl ScenarioGeneratorPanel {
                 col1.unit_edit("Area Side Length", &mut self.rp_side_len, "m");
 
                 if col1.button("Generate").clicked() {
-                    store.insert_as_save(
+                    store.insert_into_files(
                         "Random Placement".to_string(),
                         ScenarioIdentity::Generated {
                             generator: ScenarioGenerator::RandomSquare {
@@ -138,7 +138,7 @@ impl ScenarioGeneratorPanel {
                 col2.unit_edit("Area Side Length", &mut self.paths_side_len, "m");
 
                 if col2.button("Generate").clicked() {
-                    store.insert_as_save("Pathways".to_string(), 
+                    store.insert_into_files("Pathways".to_string(), 
                         ScenarioIdentity::Generated {
                             generator: ScenarioGenerator::PathwaysOne {
                                 passive_key_points: 8,
@@ -173,7 +173,7 @@ impl ScenarioGeneratorPanel {
                 col3.numeric_edit("Minimum Degree: ", &mut self.graph_min_degree);
 
                 if col3.button("Generate").clicked() {
-                    store.insert_as_save("Graph".to_string(),
+                    store.insert_into_files("Graph".to_string(),
                         ScenarioIdentity::Generated {
                             generator: ScenarioGenerator::PsudoSpatialGraph {
                                 nodes: self.graph_node_count,
@@ -195,7 +195,7 @@ impl ScenarioGeneratorPanel {
 
             ui.horizontal(|ui| {
                 if ui.button("Generate").clicked() {
-                    store.insert_as_save("New Scenario".to_string(),
+                    store.insert_into_files("New Scenario".to_string(),
                         ScenarioIdentity::Generated {
                             generator: self.generator.clone(),
                             seed: self.seed,
