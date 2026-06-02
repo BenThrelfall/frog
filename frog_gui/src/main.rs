@@ -1,6 +1,6 @@
-use egui::{CentralPanel, Frame, Margin, SidePanel};
+use egui::{CentralPanel, Frame, Margin, Panel};
 
-use egui_dock::{DockArea, DockState, TabViewer};
+use egui_dock::{DockArea, DockState, NodePath, TabViewer, tab_viewer::OnCloseResponse};
 use frogcore::{
     node::NodeModel,
     scenario::Scenario,
@@ -129,21 +129,20 @@ impl MyApp {
         egui_macroquad::ui(|ctx| self.update_egui(ctx));
     }
 
-    fn update_egui(&mut self, ctx: &egui::Context) {
-        ctx.style_mut(|style| {
+    fn update_egui(&mut self, base_ui: &mut egui::Ui) {
+        base_ui.global_style_mut(|style| {
             style.visuals = dark_visuals();
         });
 
-        SidePanel::left("mode_selector")
-            .default_width(150.0)
-            .show(ctx, |ui| {
+        Panel::left("mode_selector")
+            .default_size(150.0)
+            .show_inside(base_ui, |ui| {
                 ui.vertical_centered(|ui| {
                     ui.menu_button("Create New", |ui| {
                         if ui.button("Empty Custom Scenario").clicked() {
                             self.tab_display
                                 .store
                                 .insert_as_save("New Scenario".to_string(), default_scenario());
-                            ui.close_menu();
                         }
                         if ui.button("Custom Scenario from Generator").clicked() {
                             let generator_panel = ScenarioGeneratorPanel::new();
@@ -151,7 +150,6 @@ impl MyApp {
                                 body: TabBody::ScenarioGenerator(Box::new(generator_panel)),
                             });
                             self.tabs.push_to_focused_leaf(tab_id);
-                            ui.close_menu();
                         }
                     });
                 });
@@ -185,13 +183,10 @@ impl MyApp {
                         let scen_button = ui.button(&scen.name);
 
                         scen_button.context_menu(|ui| {
-                            if ui.button("Create copy").clicked() {
-                                ui.close_menu();
-                            }
+                            if ui.button("Create copy").clicked() {}
 
                             if ui.button("Rename").clicked() {
                                 self.tab_display.store.renaming_scenario = Some(key);
-                                ui.close_menu();
                             }
                         });
 
@@ -200,7 +195,11 @@ impl MyApp {
                                 .open_in_tab
                                 .and_then(|tab_key| self.tabs.find_tab(&tab_key))
                             {
-                                Some(indices) => self.tabs.set_active_tab(indices),
+                                Some(indices) => {
+                                    self.tabs
+                                        .set_active_tab(indices)
+                                        .expect("Just been searched for so should be valid");
+                                }
                                 None => {
                                     let tab_id = self.tab_display.tabs.insert(Tab {
                                         body: TabBody::ScenarioEditor(Box::new(
@@ -218,15 +217,17 @@ impl MyApp {
                     });
             });
 
-        CentralPanel::default().frame(Frame::NONE).show(ctx, |ui| {
-            let mut style = egui_dock::Style::from_egui(ui.style());
-            style.tab.tab_body.inner_margin = Margin::ZERO;
-            DockArea::new(&mut self.tabs)
-                .style(style)
-                .show_leaf_collapse_buttons(false)
-                .show_leaf_close_all_buttons(false)
-                .show_inside(ui, &mut self.tab_display);
-        });
+        CentralPanel::default()
+            .frame(Frame::NONE)
+            .show_inside(base_ui, |ui| {
+                let mut style = egui_dock::Style::from_egui(ui.style());
+                style.tab.tab_body.inner_margin = Margin::ZERO;
+                DockArea::new(&mut self.tabs)
+                    .style(style)
+                    .show_leaf_collapse_buttons(false)
+                    .show_leaf_close_all_buttons(false)
+                    .show_inside(ui, &mut self.tab_display);
+            });
 
         self.tab_display
             .store
@@ -337,13 +338,7 @@ impl TabViewer for TabDisplay {
             .show(*tab, ui, &mut self.store);
     }
 
-    fn context_menu(
-        &mut self,
-        ui: &mut egui::Ui,
-        tab: &mut Self::Tab,
-        _surface: egui_dock::SurfaceIndex,
-        _node: egui_dock::NodeIndex,
-    ) {
+    fn context_menu(&mut self, ui: &mut egui::Ui, tab: &mut Self::Tab, _path: NodePath) {
         let tab = self.tabs.get_mut(*tab).unwrap();
 
         match &mut tab.body {
@@ -353,18 +348,16 @@ impl TabViewer for TabDisplay {
                         .saved_data
                         .and_then(|x| self.store.scenarios.get_mut(x))
                     else {
-                        let new_key = self.store
+                        let new_key = self
+                            .store
                             .insert_as_save("Saved Scenario".to_string(), panel.scenario.clone());
 
                         panel.saved_data = Some(new_key);
-                        ui.close_menu();
                         return;
                     };
 
                     save.scenario = panel.scenario.clone();
                     panel.dirty = false;
-
-                    ui.close_menu();
                 }
             }
             _ => (),
@@ -381,19 +374,9 @@ impl TabViewer for TabDisplay {
         true
     }
 
-    fn on_close(&mut self, tab: &mut Self::Tab) -> bool {
+    fn on_close(&mut self, tab: &mut Self::Tab) -> OnCloseResponse {
         self.store.queue_action(GlobalAction::OnCloseTab(*tab));
-        true
-    }
-
-    fn on_add(&mut self, _surface: egui_dock::SurfaceIndex, _node: egui_dock::NodeIndex) {}
-
-    fn add_popup(
-        &mut self,
-        _ui: &mut egui::Ui,
-        _surface: egui_dock::SurfaceIndex,
-        _node: egui_dock::NodeIndex,
-    ) {
+        OnCloseResponse::Close
     }
 
     fn force_close(&mut self, _tab: &mut Self::Tab) -> bool {
@@ -419,6 +402,12 @@ impl TabViewer for TabDisplay {
     fn scroll_bars(&self, _tab: &Self::Tab) -> [bool; 2] {
         [false, false]
     }
+
+    fn is_closeable(&self, _tab: &Self::Tab) -> bool {
+        true
+    }
+
+    fn on_rect_changed(&mut self, _tab: &mut Self::Tab) {}
 }
 
 #[derive(Debug, Clone)]

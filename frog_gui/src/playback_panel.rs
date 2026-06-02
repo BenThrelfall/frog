@@ -153,23 +153,23 @@ impl PlaybackPanel {
         let item_background = Color32::from_hex("#212121").unwrap();
         let main_red = Color32::from_hex("#9b0d0d").unwrap();
 
-        egui::TopBottomPanel::top(ui.id().with("timeline")).show_inside(ui, |ui| {
+        egui::Panel::top(ui.id().with("timeline")).show_inside(ui, |ui| {
             self.analysis_timeline_panel(item_background, main_red, ui);
         });
 
-        egui::SidePanel::left(ui.id().with("inspector"))
-            .max_width(500.0)
-            .min_width(350.0)
+        egui::Panel::left(ui.id().with("inspector"))
+            .max_size(500.0)
+            .min_size(350.0)
             .show_inside(ui, |ui| {
                 self.analysis_inspector_panel(&node_locations, item_background, ui)
             });
 
-        egui::SidePanel::right(ui.id().with("right_panel"))
-            .min_width(285.0)
+        egui::Panel::right(ui.id().with("right_panel"))
+            .min_size(285.0)
             .show_inside(ui, |ui| self.analysis_events_panel(item_background, ui));
 
-        egui::TopBottomPanel::bottom(ui.id().with("transmission_timeline"))
-            .min_height(150.0)
+        egui::Panel::bottom(ui.id().with("transmission_timeline"))
+            .min_size(150.0)
             .show_inside(ui, |ui| {
                 self.analysis_transmission_timeline(main_red, ui);
             });
