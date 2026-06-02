@@ -139,7 +139,7 @@ impl ScenarioEditorPanel {
             }
         }
 
-        egui::SidePanel::left(ui.id().with("Left panel")).show_inside(ui, |ui| {
+        egui::Panel::left(ui.id().with("Left panel")).show_inside(ui, |ui| {
             egui::ScrollArea::vertical()
                 .id_salt("editor left scroll")
                 .show(ui, |ui| {
@@ -154,7 +154,7 @@ impl ScenarioEditorPanel {
                 });
         });
 
-        egui::SidePanel::right(ui.id().with("Right panel")).show_inside(ui, |ui| {
+        egui::Panel::right(ui.id().with("Right panel")).show_inside(ui, |ui| {
             egui::ScrollArea::vertical()
                 .id_salt("editor right scroll")
                 .show(ui, |ui| {
@@ -169,7 +169,7 @@ impl ScenarioEditorPanel {
                 });
         });
 
-        egui::TopBottomPanel::top(ui.id().with("Top panel")).show_inside(ui, |ui| {
+        egui::Panel::top(ui.id().with("Top panel")).show_inside(ui, |ui| {
             ui.vertical_centered(|ui| {
                 if ui.button("Run").clicked() {
                     do_run_scenario = true;
@@ -177,8 +177,8 @@ impl ScenarioEditorPanel {
             })
         });
 
-        egui::TopBottomPanel::bottom(ui.id().with("Bottom panel"))
-            .min_height(30.)
+        egui::Panel::bottom(ui.id().with("Bottom panel"))
+            .min_size(30.)
             .show_inside(ui, |ui| ui.label("Editor bottom panel"));
 
         let central_rect = egui::CentralPanel::default()
