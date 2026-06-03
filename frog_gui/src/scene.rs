@@ -75,6 +75,9 @@ impl SceneData {
             self.zoom_level / scene_rect.h,
         );
 
+        let delta = mouse_pos - self.world_mouse_pos();
+        self.camera.target += delta;
+
         //Handling Panning
         match (self.panning, middle_click) {
             (None, true) => {
