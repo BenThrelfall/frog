@@ -169,6 +169,13 @@ impl SceneData {
         }
     }
 
+    pub fn any_interaction(&self, scene_rect: Rect) -> bool {
+        scene_rect.contains(mouse_position().into())
+            && (is_mouse_button_down(MouseButton::Left)
+                || is_mouse_button_down(MouseButton::Middle)
+                || is_mouse_button_down(MouseButton::Right))
+    }
+
     pub fn scene_egui(&mut self, ui: &mut egui::Ui, can_drag: bool) {
         if self.show_help_text {
             egui::Frame::new()

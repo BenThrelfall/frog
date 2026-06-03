@@ -47,6 +47,19 @@ impl ScenarioEditorPanel {
             dirty: false,
         }
     }
+
+    pub fn save(&mut self, store: &mut GuiStore) {
+        let Some(save) = self.saved_data else {
+            let new_key =
+                store.insert_into_files("Saved Scenario".to_string(), self.scenario.clone());
+
+            self.saved_data = Some(new_key);
+            return;
+        };
+
+        store.files.save_over(save, self.scenario.clone());
+        self.dirty = false;
+    }
 }
 
 pub fn new_scenario_and_panel() -> ScenarioEditorPanel {
@@ -235,6 +248,10 @@ fn editor_scene(
         w as i32,
         h as i32,
     ));
+
+    if scene.any_interaction(scene_rect) {
+        ui.response().request_focus();
+    }
 
     scene.camera_control(scene_rect);
     scene.select_and_reposition_interaction(inspect_target, map, scene_rect);

@@ -1,4 +1,4 @@
-use egui::{CentralPanel, Frame, Margin, Panel, TextBuffer};
+use egui::{CentralPanel, Frame, Margin, MenuBar, Panel, TextBuffer};
 
 use egui_dock::{DockArea, DockState, NodePath, TabViewer, tab_viewer::OnCloseResponse};
 use frogcore::{
@@ -8,7 +8,7 @@ use frogcore::{
     units::Time,
 };
 
-use macroquad::prelude::*;
+use macroquad::{miniquad::window::request_quit, prelude::*};
 use slotmap::{SlotMap, new_key_type};
 
 use crate::{
@@ -48,7 +48,11 @@ async fn main() {
         global_action_queue: Vec::new(),
         next_id: 0,
         debugger: Debugger::new(),
-        files: FileSystem::new(),
+        files: {
+            let mut files = FileSystem::new();
+            files.change_root(".".into());
+            files
+        },
         renaming_scenario: None,
         name_buf: String::new(),
     };
@@ -108,6 +112,7 @@ struct MyApp {
 
 impl MyApp {
     async fn run(mut self) {
+        self.tabs.set_focused_node_and_surface(NodePath::MAIN_ROOT);
         loop {
             self.tab_display.store.debugger.reset();
             clear_background(Color::from_hex(0x404040));
@@ -128,6 +133,32 @@ impl MyApp {
     fn update_egui(&mut self, base_ui: &mut egui::Ui) {
         base_ui.global_style_mut(|style| {
             style.visuals = dark_visuals();
+        });
+
+        MenuBar::new().ui(base_ui, |ui| {
+            ui.add_space(10.);
+            ui.menu_button("File", |ui| {
+                if ui.button("Save").clicked() {
+                    if let Some((_, tab)) = self.tabs.find_active_focused() {
+                        let tab = self
+                            .tab_display
+                            .tabs
+                            .get_mut(*tab)
+                            .expect("Tab keys in DockState must be valid");
+
+                        match &mut tab.body {
+                            TabBody::ScenarioEditor(panel) => {
+                                panel.save(&mut self.tab_display.store)
+                            }
+                            _ => (),
+                        }
+                    }
+                }
+                ui.separator();
+                if ui.button("Exit").clicked() {
+                    request_quit();
+                }
+            });
         });
 
         Panel::left("mode_selector")
@@ -184,11 +215,25 @@ impl MyApp {
                         let scen_button = ui.button(scen.name());
 
                         scen_button.context_menu(|ui| {
-                            if ui.button("Create copy").clicked() {}
+                            if ui.button("Create copy").clicked() {
+                                self.tab_display.store.global_action_queue.push(
+                                    GlobalAction::CreateScenario(
+                                        format!("Copy of {}", scen.name()),
+                                        scen.scenario().clone(),
+                                    ),
+                                );
+                            }
 
                             if ui.button("Rename").clicked() {
                                 self.tab_display.store.renaming_scenario = Some(key);
                                 self.tab_display.store.name_buf = scen.name();
+                            }
+
+                            if ui.button("Delete").clicked() {
+                                self.tab_display
+                                    .store
+                                    .global_action_queue
+                                    .push(GlobalAction::DeleteScenario(key));
                             }
                         });
 
@@ -236,12 +281,39 @@ impl MyApp {
             .global_action_queue
             .drain(..)
             .for_each(|action| match action {
+                GlobalAction::CreateScenario(name, scenario) => {
+                    insert_into_files(
+                        name,
+                        scenario,
+                        &mut self.tab_display.store.files,
+                        &mut self.tab_display.store.renaming_scenario,
+                        &mut self.tab_display.store.name_buf,
+                    );
+                }
                 GlobalAction::RunScenario(linked_save, scenario, model) => {
                     let playback = PlaybackPanel::from_scenario(scenario, model, linked_save);
                     let tab_id = self.tab_display.tabs.insert(Tab {
                         body: TabBody::Analysis(Box::new(playback)),
                     });
                     self.tabs.push_to_focused_leaf(tab_id);
+                }
+                GlobalAction::DeleteScenario(scen_key) => {
+                    self.tabs.retain_tabs(|tab_key| {
+                        let tab = self.tab_display.tabs.get(*tab_key).expect("msg");
+                        let output = match &tab.body {
+                            TabBody::ScenarioEditor(panel) => {
+                                panel.saved_data.is_none_or(|x| x != scen_key)
+                            }
+                            _ => true,
+                        };
+
+                        if !output {
+                            self.tab_display.tabs.remove(*tab_key);
+                        }
+
+                        output
+                    });
+                    self.tab_display.store.files.delete(scen_key);
                 }
                 GlobalAction::OnCloseTab(tab_key) => {
                     self.tab_display.tabs.remove(tab_key);
@@ -294,11 +366,29 @@ impl GuiStore {
     }
 
     pub fn insert_into_files(&mut self, name: String, scenario: Scenario) -> ScenarioKey {
-        self.name_buf = name.clone();
-        let key = self.files.save_new_scenario(name, scenario);
-        self.renaming_scenario = Some(key);
-        key
+        let GuiStore {
+            files,
+            renaming_scenario,
+            name_buf,
+            ..
+        } = self;
+        insert_into_files(name, scenario, files, renaming_scenario, name_buf)
     }
+}
+
+fn insert_into_files(
+    name: String,
+    scenario: Scenario,
+    files: &mut FileSystem,
+    renaming_scenario: &mut Option<ScenarioKey>,
+    name_buf: &mut String,
+) -> ScenarioKey {
+    let key = files.save_new_scenario(name, scenario);
+    *name_buf = files
+        .get_name(key)
+        .expect("Key has just been created: must be valid");
+    *renaming_scenario = Some(key);
+    key
 }
 
 impl TabViewer for TabDisplay {
@@ -340,17 +430,7 @@ impl TabViewer for TabDisplay {
         match &mut tab.body {
             TabBody::ScenarioEditor(panel) => {
                 if ui.button("Save").clicked() {
-                    let Some(save) = panel.saved_data else {
-                        let new_key = self
-                            .store
-                            .insert_into_files("Saved Scenario".to_string(), panel.scenario.clone());
-
-                        panel.saved_data = Some(new_key);
-                        return;
-                    };
-
-                    self.store.files.save_over(save, panel.scenario.clone());
-                    panel.dirty = false;
+                    panel.save(&mut self.store);
                 }
             }
             _ => (),
@@ -405,8 +485,9 @@ impl TabViewer for TabDisplay {
 
 #[derive(Debug, Clone)]
 pub enum GlobalAction {
-    //CreateScenario(String, Scenario),
+    CreateScenario(String, Scenario),
     RunScenario(Option<ScenarioKey>, Scenario, NodeModel),
+    DeleteScenario(ScenarioKey),
     OnCloseTab(TabKey),
     CommitRename,
 }
