@@ -190,10 +190,6 @@ impl ScenarioEditorPanel {
             })
         });
 
-        egui::Panel::bottom(ui.id().with("Bottom panel"))
-            .min_size(30.)
-            .show_inside(ui, |ui| ui.label("Editor bottom panel"));
-
         let central_rect = egui::CentralPanel::default()
             .frame(Frame::NONE)
             .show_inside(ui, |ui| {
