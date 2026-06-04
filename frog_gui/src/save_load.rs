@@ -13,7 +13,7 @@ pub struct FileSystem {
     pub scenarios: SlotMap<ScenarioKey, ScenarioFile>,
 }
 
-const EXTENSIONS: [&str; 5] = ["json", "frog", "sim", "simpack", "rmp"];
+pub const EXTENSIONS: [&str; 5] = ["json", "frog", "sim", "simpack", "rmp"];
 
 fn read_sim_files(root: PathBuf) -> Vec<PathBuf> {
     let Ok(dir) = read_dir(root) else {
@@ -36,7 +36,8 @@ impl FileSystem {
         }
     }
 
-    pub fn change_root(&mut self, root: PathBuf) {
+    /// Does not traverse sub-folders
+    pub fn open_scenarios_in_folder(&mut self, root: PathBuf) {
         let candidates = read_sim_files(root);
 
         let fs_scenarios: Vec<_> = candidates
@@ -55,6 +56,32 @@ impl FileSystem {
                 path,
             });
         }
+    }
+
+    pub fn open(&mut self, path: PathBuf) -> Result<ScenarioKey, String> {
+        let Ok(c_path) = path.canonicalize() else {
+            return Err("Cannot open file".to_string());
+        };
+
+        if let Some((key, _)) = self
+            .scenarios
+            .iter()
+            .find(|(_, x)| x.path.canonicalize().is_ok_and(|ni| ni == c_path))
+        {
+            return Ok(key);
+        };
+
+        let Ok(scenario) = load_file::<Scenario>(path.clone()) else {
+            return Err("Cannot open file".to_string());
+        };
+
+        let output = self.scenarios.insert(ScenarioFile {
+            open_in_tab: None,
+            scenario,
+            path,
+        });
+
+        Ok(output)
     }
 
     pub fn delete(&mut self, key: ScenarioKey) {

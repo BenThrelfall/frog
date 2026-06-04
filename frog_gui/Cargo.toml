@@ -13,3 +13,4 @@ macroquad = "0.4.14"
 egui-macroquad = {path="../egui-macroquad"}
 egui_dock = "0.19"
 slotmap = "1.1.1"
+rfd = "0.17.2"
