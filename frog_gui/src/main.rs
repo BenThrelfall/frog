@@ -50,7 +50,7 @@ async fn main() {
         debugger: Debugger::new(),
         files: {
             let mut files = FileSystem::new();
-            files.change_root(".".into());
+            files.open_scenarios_in_folder(".".into());
             files
         },
         renaming_scenario: None,
@@ -138,6 +138,33 @@ impl MyApp {
         MenuBar::new().ui(base_ui, |ui| {
             ui.add_space(10.);
             ui.menu_button("File", |ui| {
+                if ui.button("Open File").clicked() {
+                    if let Some(path) = rfd::FileDialog::new()
+                        .set_directory("/")
+                        .add_filter("Sim Files", &save_load::EXTENSIONS)
+                        .pick_file()
+                    {
+                        let scen_key = self.tab_display.store.files.open(path).unwrap();
+                        open_scenario_as_tab(
+                            scen_key,
+                            self.tab_display
+                                .store
+                                .files
+                                .scenarios
+                                .get_mut(scen_key)
+                                .expect("Just created: must be valid"),
+                            &mut self.tabs,
+                            &mut self.tab_display.tabs,
+                        );
+                    }
+                }
+                ui.separator();
+                if ui.button("Switch Project Folder").clicked() {
+                    if let Some(path) = rfd::FileDialog::new().set_directory("/").pick_folder() {
+                        self.change_project_dir(path);
+                    }
+                }
+                ui.separator();
                 if ui.button("Save").clicked() {
                     if let Some((_, tab)) = self.tabs.find_active_focused() {
                         let tab = self
@@ -238,28 +265,12 @@ impl MyApp {
                         });
 
                         if scen_button.clicked() {
-                            match scen
-                                .open_in_tab
-                                .and_then(|tab_key| self.tabs.find_tab(&tab_key))
-                            {
-                                Some(indices) => {
-                                    self.tabs
-                                        .set_active_tab(indices)
-                                        .expect("Just been searched for so should be valid");
-                                }
-                                None => {
-                                    let tab_id = self.tab_display.tabs.insert(Tab {
-                                        body: TabBody::ScenarioEditor(Box::new(
-                                            ScenarioEditorPanel::new(
-                                                scen.scenario().clone(),
-                                                Some(key),
-                                            ),
-                                        )),
-                                    });
-                                    self.tabs.push_to_focused_leaf(tab_id);
-                                    scen.open_in_tab = Some(tab_id);
-                                }
-                            }
+                            open_scenario_as_tab(
+                                key,
+                                scen,
+                                &mut self.tabs,
+                                &mut self.tab_display.tabs,
+                            );
                         }
                     });
             });
@@ -330,6 +341,13 @@ impl MyApp {
                 }
             });
     }
+
+    fn change_project_dir(&mut self, path: std::path::PathBuf) {
+        self.tabs.retain_tabs(|_| false);
+        self.tab_display.tabs.clear();
+        self.tab_display.store.files.scenarios.clear();
+        self.tab_display.store.files.open_scenarios_in_folder(path);
+    }
 }
 
 new_key_type! {
@@ -389,6 +407,34 @@ fn insert_into_files(
         .expect("Key has just been created: must be valid");
     *renaming_scenario = Some(key);
     key
+}
+
+fn open_scenario_as_tab(
+    key: ScenarioKey,
+    scen: &mut save_load::ScenarioFile,
+    dock_state: &mut DockState<TabKey>,
+    tabs: &mut SlotMap<TabKey, Tab>,
+) {
+    match scen
+        .open_in_tab
+        .and_then(|tab_key| dock_state.find_tab(&tab_key))
+    {
+        Some(indices) => {
+            dock_state
+                .set_active_tab(indices)
+                .expect("Just been searched for so should be valid");
+        }
+        None => {
+            let tab_id = tabs.insert(Tab {
+                body: TabBody::ScenarioEditor(Box::new(ScenarioEditorPanel::new(
+                    scen.scenario().clone(),
+                    Some(key),
+                ))),
+            });
+            dock_state.push_to_focused_leaf(tab_id);
+            scen.open_in_tab = Some(tab_id);
+        }
+    }
 }
 
 impl TabViewer for TabDisplay {
