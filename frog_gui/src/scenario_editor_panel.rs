@@ -24,6 +24,7 @@ pub struct ScenarioEditorPanel {
     delete_node_pending: Option<usize>,
     message_sender_filter: Option<usize>,
     message_target_filter: Option<usize>,
+    default_node_model: ModelSelection,
 }
 
 impl ScenarioEditorPanel {
@@ -45,6 +46,7 @@ impl ScenarioEditorPanel {
             message_target_filter: None,
             saved_data,
             dirty: false,
+            default_node_model: ModelSelection::Meshtastic,
         }
     }
 
@@ -159,11 +161,16 @@ impl ScenarioEditorPanel {
                     node_setting_edit_panel(
                         &mut self.inspect_target,
                         settings,
-                        model,
                         map,
                         &mut self.delete_node_pending,
                         ui,
                     );
+
+                    ui.separator();
+                    ui.add_space(30.0);
+                    ui.separator();
+
+                    sim_settings_edit_panel(&mut self.default_node_model, model, ui);
                 });
         });
 
@@ -211,7 +218,7 @@ impl ScenarioEditorPanel {
             store.queue_action(GlobalAction::RunScenario(
                 self.saved_data,
                 self.scenario.clone(),
-                ModelSelection::Meshtastic.into(),
+                self.default_node_model.into(),
             ));
         }
 
@@ -413,7 +420,6 @@ fn message_editor_panel(
 fn node_setting_edit_panel(
     inspect_target: &mut Inspectable,
     settings: &mut Vec<ScenarioNodeSettings>,
-    model: &mut frogcore::simulation::models::TransmissionModel,
     map: &mut Vec<Point>,
     modal_open: &mut Option<usize>,
     ui: &mut egui::Ui,
@@ -449,13 +455,27 @@ fn node_setting_edit_panel(
             ui.label("No Node Selected");
         }
     }
+}
 
-    ui.separator();
-    ui.add_space(30.0);
-    ui.separator();
-
+fn sim_settings_edit_panel(
+    default_node_model: &mut ModelSelection,
+    trans_model: &mut frogcore::simulation::models::TransmissionModel,
+    ui: &mut egui::Ui,
+) {
     // Simulation Settings
     ui.heading("Simulation Settings");
+
+    ui.add_space(10.0);
+
+    ui.label(RichText::new("Default Node Model").underline());
+
+    ComboBox::from_label("Model")
+        .selected_text(format!("{:?}", default_node_model))
+        .show_ui(ui, |ui| {
+            for model in frogcore::node::MODEL_LIST {
+                ui.selectable_value(default_node_model, model, format!("{:?}", model));
+            }
+        });
 
     ui.add_space(10.0);
 
@@ -463,7 +483,7 @@ fn node_setting_edit_panel(
     ui.add_space(5.0);
 
     use frogcore::simulation::models::*;
-    let (path_loss, noise_temp) = match model {
+    let (path_loss, noise_temp) = match trans_model {
         TransmissionModel::PairWiseNone(PairWiseCaptureEffect {
             path_loss,
             noise_temp,
