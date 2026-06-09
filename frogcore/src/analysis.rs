@@ -43,7 +43,7 @@ pub struct CompleteAnalysis {
 
 impl CompleteAnalysis {
     pub fn new(results: SimOutput, scenario: Scenario) -> CompleteAnalysis {
-        let node_settings = scenario.get_settings();
+        let node_settings = scenario.settings.clone();
         let node_count = node_settings.len();
 
         let mut node_events = vec![Vec::new(); node_count];
@@ -442,7 +442,7 @@ impl ReceptionAnalysis {
                     return None;
                 };
 
-                if !scenario.get_settings()[receiver_id].is_gateway {
+                if !scenario.settings[receiver_id].is_gateway {
                     return None;
                 }
 

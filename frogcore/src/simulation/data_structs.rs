@@ -37,8 +37,8 @@ pub struct NodeSettings {
     pub reaction_time: Time,
 }
 
-impl From<ScenarioNodeSettings> for NodeSettings {
-    fn from(value: ScenarioNodeSettings) -> Self {
+impl From<&ScenarioNodeSettings> for NodeSettings {
+    fn from(value: &ScenarioNodeSettings) -> Self {
         Self {
             sf: value.sf,
             bandwidth: value.bandwidth,

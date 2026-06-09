@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 
 const MAX_REBROADCASTS: i32 = 3;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct AcknowledgedOrRepeatFlood {
     rebroadcasts: VecDeque<(StoredPacket<BasicHeader>, i32)>,
     acknowledgements: HashSet<GlobalPacketId>,

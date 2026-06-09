@@ -35,15 +35,10 @@ type EventQueue = BinaryHeap<SimEvent>;
 
 const SIM_END: Time = Time::from_seconds(60.0 * 60.0 * 4.0); //Time::from_imilis(i32::MAX / 2);
 
-pub fn run_simulation(
-    random_seed: u64,
-    scenario: Scenario,
-    model: NodeModel,
-    do_node_logs: bool,
-) -> SimOutput {
+pub fn run_simulation(random_seed: u64, scenario: Scenario, do_node_logs: bool) -> SimOutput {
     let scenario_identity = scenario.identity.clone();
 
-    let mut sim = init_simulation(random_seed, scenario, model, do_node_logs);
+    let mut sim = init_simulation(random_seed, scenario, do_node_logs);
 
     while !sim.finished() {
         sim.step();
@@ -62,21 +57,16 @@ pub fn run_simulation(
     }
 }
 
-fn init_simulation(
-    random_seed: u64,
-    scenario: Scenario,
-    model: NodeModel,
-    do_node_logs: bool,
-) -> Simulation {
-    let node_settings = scenario.get_settings();
+fn init_simulation(random_seed: u64, scenario: Scenario, do_node_logs: bool) -> Simulation {
+    let (node_settings, node_models) = scenario.to_sim_params();
 
     // Set up Simulation and create node structs
     let mut sim = Simulation::new(
         scenario.map,
-        node_settings.into_iter().map(|x| x.into()),
+        node_settings,
         scenario.model,
         random_seed,
-        model,
+        node_models,
         do_node_logs,
     );
 
@@ -122,7 +112,7 @@ pub enum NodeError {
     RadioBusyError(Header, MessageContent),
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum MessageContent {
     GeneratedMessage(usize),
     NodeMessage(CustomContent),
@@ -399,21 +389,24 @@ macro_rules! context {
 impl Simulation {
     pub fn new(
         graph: NodeLocation,
-        node_settings: impl Iterator<Item = NodeSettings>,
+        node_settings: Vec<NodeSettings>,
         transmission: TransmissionModel,
         random_seed: u64,
-        node_model: NodeModel,
+        node_models: Vec<NodeModel>,
         do_node_logs: bool,
     ) -> Self {
         let graph_len = graph.len();
+
+        assert_eq!(graph_len, node_settings.len());
+        assert_eq!(node_settings.len(), node_models.len());
 
         let sim = Simulation {
             sim_time: 0.0.into(),
             event_queue: BinaryHeap::new(),
             graph,
             em_field: Vec::new(),
-            nodes: (0..graph_len).map(|_| node_model.clone()).collect(),
-            node_settings: node_settings.take(graph_len).collect(),
+            nodes: node_models,
+            node_settings,
             notify_status: (0..graph_len).map(|_| HashMap::new()).collect(),
             test_messages: Vec::new(),
             next_trans_id: 0,
@@ -603,13 +596,8 @@ pub struct LiveSimulation {
 }
 
 impl LiveSimulation {
-    pub fn new(
-        random_seed: u64,
-        scenario: Scenario,
-        model: NodeModel,
-        do_node_logs: bool,
-    ) -> LiveSimulation {
-        let sim = init_simulation(random_seed, scenario, model, do_node_logs);
+    pub fn new(random_seed: u64, scenario: Scenario, do_node_logs: bool) -> LiveSimulation {
+        let sim = init_simulation(random_seed, scenario, do_node_logs);
 
         LiveSimulation {
             active: sim.clone(),

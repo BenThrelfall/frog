@@ -1,7 +1,7 @@
 use egui::{Color32, ComboBox, DragValue, Frame, Modal, RichText};
 
 use frogcore::{
-    node::ModelSelection,
+    node::{BasicFlood, ImplNodeModel, NodeModel},
     node_location::{NodeLocation, Point, Points, Timepoint},
     scenario::{
         MovementIndicator, Scenario, ScenarioIdentity, ScenarioMessage, ScenarioNodeSettings,
@@ -24,7 +24,6 @@ pub struct ScenarioEditorPanel {
     delete_node_pending: Option<usize>,
     message_sender_filter: Option<usize>,
     message_target_filter: Option<usize>,
-    default_node_model: ModelSelection,
 }
 
 impl ScenarioEditorPanel {
@@ -46,7 +45,6 @@ impl ScenarioEditorPanel {
             message_target_filter: None,
             saved_data,
             dirty: false,
-            default_node_model: ModelSelection::Meshtastic,
         }
     }
 
@@ -81,6 +79,7 @@ pub fn default_scenario() -> Scenario {
         model: PairWiseCaptureEffect::default().into(),
         messages: vec![],
         settings: vec![ScenarioNodeSettings::default()],
+        node_model_groups: vec![Box::new(BasicFlood::default().into())],
     }
 }
 
@@ -96,6 +95,7 @@ impl ScenarioEditorPanel {
             model,
             messages,
             settings,
+            node_model_groups,
         } = &mut self.scenario;
 
         let map = match map {
@@ -163,6 +163,7 @@ impl ScenarioEditorPanel {
                         settings,
                         map,
                         &mut self.delete_node_pending,
+                        node_model_groups.len(),
                         ui,
                     );
 
@@ -170,7 +171,7 @@ impl ScenarioEditorPanel {
                     ui.add_space(30.0);
                     ui.separator();
 
-                    sim_settings_edit_panel(&mut self.default_node_model, model, ui);
+                    sim_settings_edit_panel(node_model_groups, model, ui);
                 });
         });
 
@@ -218,7 +219,6 @@ impl ScenarioEditorPanel {
             store.queue_action(GlobalAction::RunScenario(
                 self.saved_data,
                 self.scenario.clone(),
-                self.default_node_model.into(),
             ));
         }
 
@@ -422,6 +422,7 @@ fn node_setting_edit_panel(
     settings: &mut Vec<ScenarioNodeSettings>,
     map: &mut Vec<Point>,
     modal_open: &mut Option<usize>,
+    node_model_group_count: usize,
     ui: &mut egui::Ui,
 ) {
     ui.heading("Node Editor");
@@ -445,7 +446,7 @@ fn node_setting_edit_panel(
                     *inspect_target = Inspectable::Nothing;
                 }
             });
-            inspect_node(&mut settings[id], &mut map[id], ui);
+            inspect_node(&mut settings[id], node_model_group_count, &mut map[id], ui);
             ui.add_space(5.0);
             if ui.button("Delete Node").clicked() {
                 *modal_open = Some(id);
@@ -458,7 +459,7 @@ fn node_setting_edit_panel(
 }
 
 fn sim_settings_edit_panel(
-    default_node_model: &mut ModelSelection,
+    node_model_groups: &mut Vec<Box<NodeModel>>,
     trans_model: &mut frogcore::simulation::models::TransmissionModel,
     ui: &mut egui::Ui,
 ) {
@@ -467,15 +468,22 @@ fn sim_settings_edit_panel(
 
     ui.add_space(10.0);
 
-    ui.label(RichText::new("Default Node Model").underline());
+    ui.label(RichText::new("Node Model Groups").underline());
 
-    ComboBox::from_label("Model")
-        .selected_text(format!("{:?}", default_node_model))
-        .show_ui(ui, |ui| {
-            for model in frogcore::node::MODEL_LIST {
-                ui.selectable_value(default_node_model, model, format!("{:?}", model));
+    for (n, group) in node_model_groups.iter_mut().enumerate() {
+        let direct_ref = group.as_mut();
+        let label = group_label(n);
+        ui.horizontal(|ui| {
+            node_model_combo_box(direct_ref, label, ui);
+
+            if n > 0 && ui.button("X").clicked() {
+                todo!()
             }
         });
+    }
+    if ui.button("Add Group").clicked() {
+        node_model_groups.push(Box::new(BasicFlood::default().into()));
+    }
 
     ui.add_space(10.0);
 
@@ -576,7 +584,36 @@ fn sim_settings_edit_panel(
     }
 }
 
-fn inspect_node(current_node: &mut ScenarioNodeSettings, point: &mut Point, ui: &mut egui::Ui) {
+fn node_model_combo_box(direct_ref: &mut NodeModel, label: String, ui: &mut egui::Ui) {
+    ComboBox::from_label(label)
+        .selected_text(format!("{}", direct_ref.identity_str()))
+        .show_ui(ui, |ui| {
+            for model in frogcore::node::MODEL_LIST {
+                if ui
+                    .selectable_label(direct_ref.selection_enum() == model, format!("{model:?}"))
+                    .clicked()
+                {
+                    *direct_ref = model.into();
+                };
+            }
+        });
+}
+
+fn group_label(n: usize) -> String {
+    let label = if n == 0 {
+        "Default".to_string()
+    } else {
+        format!("Group {n}")
+    };
+    label
+}
+
+fn inspect_node(
+    current_node: &mut ScenarioNodeSettings,
+    node_model_group_count: usize,
+    point: &mut Point,
+    ui: &mut egui::Ui,
+) {
     ui.add_space(5.0);
     ui.horizontal(|ui| {
         ui.label("Position");
@@ -611,6 +648,32 @@ fn inspect_node(current_node: &mut ScenarioNodeSettings, point: &mut Point, ui: 
                 }
             });
     });
+
+    ui.add_space(5.0);
+    ui.label("Node Model");
+    use frogcore::scenario::ScenarioNodeModel;
+    match &mut current_node.node_model {
+        ScenarioNodeModel::Group(group) => {
+            ComboBox::from_label("Group")
+                .selected_text(group_label(*group))
+                .show_ui(ui, |ui| {
+                    for n in 0..node_model_group_count {
+                        ui.selectable_value(group, n, group_label(n));
+                    }
+                });
+            if ui.button("Override Group").clicked() {
+                current_node.node_model =
+                    ScenarioNodeModel::Override(Box::new(BasicFlood::default().into()));
+            }
+        }
+        ScenarioNodeModel::Override(node_model) => {
+            node_model_combo_box(node_model.as_mut(), "Override".to_string(), ui);
+            if ui.button("Return to Group").clicked() {
+                current_node.node_model = ScenarioNodeModel::Group(0);
+            }
+        }
+    }
+    ui.add_space(5.0);
 
     ui.add_space(5.0);
     ui.label(format!(

@@ -1,5 +1,5 @@
 use criterion::{criterion_group, criterion_main, Criterion};
-use frogcore::{node::BasicFlood, scenario::Scenario, simulation::run_simulation};
+use frogcore::{scenario::Scenario, simulation::run_simulation};
 use std::{hint::black_box, time::Duration};
 
 const DATA: &str = include_str!("sim_file.sim");
@@ -15,7 +15,6 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             black_box(run_simulation(
                 123456,
                 this.clone(),
-                BasicFlood::new().into(),
                 false,
             ));
         })
@@ -26,7 +25,6 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             black_box(run_simulation(
                 123456,
                 this.clone(),
-                BasicFlood::new().into(),
                 true,
             ));
         })

@@ -43,7 +43,7 @@ fn slot_time(bandwidth: Frequency, sf: i32) -> Time {
 /// Uses the `MeshtasticRadioInterface` component and directly implements higher level routing logic.
 /// It is currently largely unvalidated although simple inspection of simulation output using
 /// this model appears correct up to intentional simplifications.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Meshtastic {
     radio_interface: MeshtasticRadioInterface<MeshtasticHeader>,
     from_radio_queue: VecDeque<MeshStoredPacket>,
@@ -666,7 +666,7 @@ impl Meshtastic {
 /// To cancel the broadcast of a queued packet call `MeshtasticRadioInterface::cancel_sending`.
 ///
 /// This component uses the [`NodeThread::RadioThread`]. For normal behavour do not use this elsewhere in your node model.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct MeshtasticRadioInterface<T> {
     tx_queue: VecDeque<StoredPacket<T>>,
 }

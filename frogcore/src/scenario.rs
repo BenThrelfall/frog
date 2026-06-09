@@ -3,9 +3,14 @@ pub mod generation;
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    node::NodeModel,
     node_location::NodeLocation,
     scenario::generation::ScenarioGenerator,
-    simulation::{data_structs::CarrierBand, models::TransmissionModel}, units::{Db, Dbm, Frequency, Power, SECONDS, Time},
+    simulation::{
+        data_structs::{CarrierBand, NodeSettings},
+        models::TransmissionModel,
+    },
+    units::{Db, Dbm, Frequency, Power, SECONDS, Time},
 };
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -41,12 +46,19 @@ pub struct Scenario {
     pub model: TransmissionModel,
     pub messages: Vec<ScenarioMessage>,
     pub settings: Vec<ScenarioNodeSettings>,
+    pub node_model_groups: Vec<Box<NodeModel>>,
 }
 
 impl Scenario {
-    /// Legacy use `scenario.settings` directly instead
-    pub fn get_settings(&self) -> Vec<ScenarioNodeSettings> {
-        self.settings.clone()
+    pub fn to_sim_params(&self) -> (Vec<NodeSettings>, Vec<NodeModel>) {
+        let settings = self.settings.iter().map(|x| x.into()).collect();
+
+        let node_models : Vec<NodeModel> = self.settings.iter().map(|x| match x.node_model {
+            ScenarioNodeModel::Group(index) => self.node_model_groups[index].as_ref().clone(),
+            ScenarioNodeModel::Override(ref node_model) => node_model.as_ref().clone(),
+        }).collect();
+
+        (settings, node_models)
     }
 }
 
@@ -103,8 +115,6 @@ pub enum MessageMarker {
     Emergency,
 }
 
-
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum MovementIndicator {
     Unset,
@@ -142,6 +152,9 @@ pub struct ScenarioNodeSettings {
 
     /// Time in milleseconds
     pub reaction_time: Time,
+
+    /// Node Model
+    pub node_model: ScenarioNodeModel,
 }
 
 impl Default for ScenarioNodeSettings {
@@ -174,6 +187,7 @@ impl Default for ScenarioNodeSettings {
             coding_rate: 5,
             is_gateway: false,
             movement_indicator: MovementIndicator::Unset,
+            node_model: ScenarioNodeModel::Group(0),
         }
     }
 }
@@ -188,4 +202,10 @@ impl ScenarioNodeSettings {
         self.is_gateway = true;
         self
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum ScenarioNodeModel {
+    Group(usize),
+    Override(Box<crate::node::NodeModel>),
 }

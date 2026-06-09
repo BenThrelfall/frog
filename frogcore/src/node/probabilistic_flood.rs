@@ -8,7 +8,7 @@ use super::{
 };
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ProbabilisticFlood {
     seen: HashSet<GlobalPacketId>,
     radio_interface: MeshtasticRadioInterface<MeshtasticHeader>,

@@ -9,7 +9,7 @@ pub mod stack_flood;
 use thiserror::Error;
 
 use crate::{
-    simulation::{data_structs::MessageInfo, Context, MessageContent, NodeError},
+    simulation::{Context, MessageContent, NodeError, data_structs::MessageInfo},
     units::{Db, Time},
 };
 
@@ -25,7 +25,7 @@ pub use stack_flood::StackFlood;
 macro_rules! node_model {
     ($count:literal, $($variant:ident),+) => {
 
-        #[derive(Debug, Clone, Serialize, Deserialize)]
+        #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
         pub enum NodeModel {
             $(
                 $variant($variant),
@@ -115,6 +115,16 @@ macro_rules! node_model {
 
         )*
 
+        impl NodeModel {
+            pub fn selection_enum(&self) -> ModelSelection {
+                match self {
+                    $(
+                        NodeModel::$variant(..) => ModelSelection::$variant
+                    ),*
+                }
+            }
+        }
+
         #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
         pub enum ModelSelection {
             $(
@@ -177,7 +187,7 @@ pub enum NodeThread {
     CacheThread,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum CustomContent {
     RoutingMessage {
         status: RoutingStatus,
@@ -200,7 +210,7 @@ impl CustomContent {
 
 /// Called meshtastic_Routing_Error in cpp.
 /// Renamed as its not a simulation error
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 pub enum RoutingStatus {
     NotError,
     MaxRetransmit,
@@ -286,7 +296,7 @@ pub trait BasicHeaderInfo {
     fn packet_id(&self) -> u32;
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct BasicHeader {
     dest: Destination,
     sender: usize,
@@ -307,7 +317,7 @@ impl BasicHeaderInfo for BasicHeader {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct MeshtasticHeader {
     dest: Destination,
     sender: usize,
@@ -395,7 +405,7 @@ impl From<MeshtasticHeader> for Header {
     }
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 pub enum Destination {
     Broadcast,
     Node(usize),
@@ -429,7 +439,7 @@ pub struct GlobalPacketId {
 pub type MeshStoredPacket = StoredPacket<MeshtasticHeader>;
 pub type BasicStoredPacket = StoredPacket<BasicHeader>;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct StoredPacket<H> {
     header: H,
     message_content: MessageContent,
@@ -451,7 +461,7 @@ where
 
 type MeshPendingPacket = PendingPacket<MeshtasticHeader>;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 struct PendingPacket<H> {
     packet: StoredPacket<H>,
     next_tx: Time,

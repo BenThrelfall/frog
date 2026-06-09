@@ -10,12 +10,7 @@ use rand_chacha::ChaCha12Rng;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    node_location::{Edge, Graph, NodeLocation, Points},
-    scenario::{MessageMarker, MovementIndicator, ScenarioMessage, ScenarioNodeSettings},
-    scenario::{Scenario, ScenarioIdentity},
-    simulation::models::{PairWiseCaptureEffect, TransmissionModel},
-    units::*,
-    utility::n_min,
+    node::BasicFlood, node_location::{Edge, Graph, NodeLocation, Points}, scenario::{MessageMarker, MovementIndicator, Scenario, ScenarioIdentity, ScenarioMessage, ScenarioNodeSettings}, simulation::models::{PairWiseCaptureEffect, TransmissionModel}, units::*, utility::n_min
 };
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -178,6 +173,7 @@ impl ScenarioGenerator {
                     model,
                     messages,
                     settings,
+                    node_model_groups: vec![Box::new(BasicFlood::default().into())]
                 }
             }
             ScenarioGenerator::RandomSquare {
@@ -222,6 +218,7 @@ impl ScenarioGenerator {
                     model,
                     messages,
                     settings,
+                    node_model_groups: vec![Box::new(BasicFlood::default().into())]
                 }
             }
             ScenarioGenerator::PathwaysOne {
@@ -289,6 +286,7 @@ impl ScenarioGenerator {
                     model,
                     messages,
                     settings,
+                    node_model_groups: vec![Box::new(BasicFlood::default().into())]
                 }
             }
             ScenarioGenerator::SimpleTreeGraph {
@@ -339,6 +337,7 @@ impl ScenarioGenerator {
                     model,
                     messages,
                     settings,
+                    node_model_groups: vec![Box::new(BasicFlood::default().into())]
                 }
             }
             ScenarioGenerator::RandomTilConnectedGraph { nodes, messaging } => {
@@ -376,6 +375,7 @@ impl ScenarioGenerator {
                     model,
                     messages,
                     settings,
+                    node_model_groups: vec![Box::new(BasicFlood::default().into())]
                 }
             }
             ScenarioGenerator::PsudoSpatialGraph {
@@ -421,6 +421,7 @@ impl ScenarioGenerator {
                     model,
                     messages,
                     settings,
+                    node_model_groups: vec![Box::new(BasicFlood::default().into())]
                 }
             }
         }

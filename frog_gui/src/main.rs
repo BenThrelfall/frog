@@ -2,7 +2,6 @@ use egui::{CentralPanel, Frame, Margin, MenuBar, Panel, TextBuffer};
 
 use egui_dock::{DockArea, DockState, NodePath, TabViewer, tab_viewer::OnCloseResponse};
 use frogcore::{
-    node::NodeModel,
     scenario::Scenario,
     simulation::{MessageContent, data_structs::LogItem},
     units::Time,
@@ -301,8 +300,8 @@ impl MyApp {
                         &mut self.tab_display.store.name_buf,
                     );
                 }
-                GlobalAction::RunScenario(linked_save, scenario, model) => {
-                    let playback = PlaybackPanel::from_scenario(scenario, model, linked_save);
+                GlobalAction::RunScenario(linked_save, scenario) => {
+                    let playback = PlaybackPanel::from_scenario(scenario, linked_save);
                     let tab_id = self.tab_display.tabs.insert(Tab {
                         body: TabBody::Analysis(Box::new(playback)),
                     });
@@ -532,7 +531,7 @@ impl TabViewer for TabDisplay {
 #[derive(Debug, Clone)]
 pub enum GlobalAction {
     CreateScenario(String, Scenario),
-    RunScenario(Option<ScenarioKey>, Scenario, NodeModel),
+    RunScenario(Option<ScenarioKey>, Scenario),
     DeleteScenario(ScenarioKey),
     OnCloseTab(TabKey),
     CommitRename,

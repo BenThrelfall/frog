@@ -12,7 +12,7 @@ use super::{
 
 use serde::{Deserialize, Serialize};
 /// A version of managed flooding without rebroadcasting or acknowledgements
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct SimpleManagedFlooding {
     seen: HashSet<GlobalPacketId>,
     sent: HashSet<GlobalPacketId>,

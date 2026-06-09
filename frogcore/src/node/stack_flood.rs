@@ -9,7 +9,7 @@ use super::{meshtastic::MeshtasticRadioInterface, GlobalPacketId, ImplNodeModel,
 
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct StackFlood {
     seen: HashSet<GlobalPacketId>,
     radio_interface: MeshtasticRadioInterface<BasicHeader>,

@@ -4,7 +4,7 @@ use super::{ImplNodeModel};
 
 use serde::{Deserialize, Serialize};
 /// Sends generated messages ASAP but otherwise does nothing
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct NoRouting {
     next_packet_id: u32,
 }

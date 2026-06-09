@@ -9,7 +9,6 @@ use macroquad::prelude::*;
 
 use frogcore::{
     analysis::{CompleteAnalysis, TransmissionGraph, WantedMessage, create_transmission_graphs},
-    node::NodeModel,
     node_location::NodeLocation,
     scenario::{Scenario, ScenarioNodeSettings},
     sim_file::SimOutput,
@@ -119,9 +118,9 @@ impl PlaybackPanel {
         }
     }
 
-    pub fn from_scenario(scenario: Scenario, model: NodeModel, linked_save: Option<ScenarioKey>) -> PlaybackPanel {
-        let live = LiveSimulation::new(12345, scenario.clone(), model.clone(), true);
-        let sim_output = run_simulation(12345, scenario.clone(), model, true);
+    pub fn from_scenario(scenario: Scenario, linked_save: Option<ScenarioKey>) -> PlaybackPanel {
+        let live = LiveSimulation::new(12345, scenario.clone(),  true);
+        let sim_output = run_simulation(12345, scenario.clone(), true);
 
         let mut out = PlaybackPanel::new(scenario, sim_output, linked_save);
 
